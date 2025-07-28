@@ -1,0 +1,51 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+
+# Go specific
+/bin/
+/pkg/
+/vendor/
+
+# Local environment and configuration
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+!example.env
+
+# Testing
+/coverage/
+*.coverprofile
+*.test
+
+# IDE files
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/

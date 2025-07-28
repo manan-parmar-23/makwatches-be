@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# IDE
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Environment variables
+.env
+.env.*
+!example.env
+
+# Build artifacts
+/bin/
+/tmp/
+/dist/
+
+# Test files
+**/*_test.go
+**/testdata/
+
+# Documentation
+README.md
+CONTRIBUTING.md
+LICENSE
+docs/
+
+# Development tools
+Makefile
+air.toml
