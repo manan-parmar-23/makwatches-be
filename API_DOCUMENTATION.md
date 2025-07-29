@@ -149,9 +149,50 @@ Login to the system.
       "id": "60d21b4667d0d8992e610c85",
       "name": "John Doe",
       "email": "john@example.com",
-      "role": "user"
+      "role": "user",
+      "picture": "https://example.com/profile.jpg", 
+      "authProvider": "local"
     },
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
+
+#### GET /auth/google
+Initiates the Google OAuth login flow.
+
+**Authentication:** Not required
+
+**Response:** Redirects to Google's authentication page
+
+#### GET /auth/google/callback
+Handles the callback from Google's OAuth service.
+
+**Authentication:** Not required
+
+**Query Parameters:**
+- `code` (string, required): Authorization code from Google
+- `state` (string, required): State parameter for CSRF protection
+
+**Response:** Redirects to the frontend with a token
+
+#### GET /me
+Get the current authenticated user's profile information.
+
+**Authentication:** Required
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "User profile retrieved successfully",
+  "data": {
+    "id": "60d21b4667d0d8992e610c85",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "role": "user",
+    "picture": "https://lh3.googleusercontent.com/a/example",
+    "authProvider": "google"
   }
 }
 ```
@@ -558,6 +599,9 @@ Get personalized product recommendations for a user.
   "email": "string",
   "password": "string (hashed, never returned in responses)",
   "role": "string (user, admin)",
+  "googleId": "string (optional, for Google auth)",
+  "picture": "string (optional, profile picture URL)",
+  "authProvider": "string (local, google, hybrid)",
   "createdAt": "timestamp",
   "updatedAt": "timestamp"
 }

@@ -34,6 +34,9 @@ This repository contains the backend API for the Pehnaw application.
 ### Authentication
 - `POST /auth/register` - Register a new user (name, email, password)
 - `POST /auth/login` - Login with email and password
+- `GET /auth/google` - Initiate Google OAuth login
+- `GET /auth/google/callback` - Handle Google OAuth callback
+- `GET /me` - Get current authenticated user's profile
 
 ### Products
 - `GET /products` - Get all products with optional category and price filters
@@ -202,6 +205,23 @@ REDIS_URI=localhost:6379
 JWT_SECRET=your_jwt_secret_key_here
 JWT_EXPIRATION_HOURS=24
 
+# Google OAuth Configuration
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+GOOGLE_REDIRECT_URL=http://localhost:8080/auth/google/callback
+
 # Logging
 LOG_LEVEL=debug
 ```
+
+### Setting up Google OAuth
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Navigate to "APIs & Services" > "Credentials"
+4. Click "Create Credentials" > "OAuth client ID"
+5. Select "Web application" as the application type
+6. Add your domain to "Authorized JavaScript origins" (e.g., `http://localhost:8080`)
+7. Add your callback URL to "Authorized redirect URIs" (e.g., `http://localhost:8080/auth/google/callback`)
+8. Copy the Client ID and Client Secret to your `.env` file
+9. For production, update the redirect URL to your production domain (e.g., `https://api.pehnaw.com/auth/google/callback`)

@@ -43,6 +43,8 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	auth := app.Group("/auth")
 	auth.Post("/register", authHandler.Register)
 	auth.Post("/login", authHandler.Login)
+	auth.Get("/google", authHandler.GoogleLogin)
+	auth.Get("/google/callback", authHandler.GoogleCallback)
 	
 	// Product routes
 	products := app.Group("/products")
@@ -57,6 +59,9 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	
 	// Protected routes
 	api := app.Group("/", middleware.Auth(cfg.JWTSecret))
+	
+	// User "me" endpoint
+	api.Get("/me", authHandler.Me)
 	
 	// Cart routes
 	cart := api.Group("/cart")
