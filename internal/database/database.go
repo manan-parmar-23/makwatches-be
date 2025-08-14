@@ -29,54 +29,57 @@ func NewDBClient(mongoClient *mongo.Client, dbName string, redisClient *redis.Cl
 
 // Collections returns MongoDB collections
 func (db *DBClient) Collections() struct {
-	Users              *mongo.Collection
-	Products           *mongo.Collection
-	CartItems          *mongo.Collection
-	Orders             *mongo.Collection
-	UserProfiles       *mongo.Collection
-	UserPreferences    *mongo.Collection
-	UserAddresses      *mongo.Collection
-	Inventories        *mongo.Collection
-	Reviews            *mongo.Collection
-	Wishlists          *mongo.Collection
-	ChatConversations  *mongo.Collection
-	ChatMessages       *mongo.Collection
-	Notifications      *mongo.Collection
-	Recommendations    *mongo.Collection
-	RecFeedbacks       *mongo.Collection
+	Users             *mongo.Collection
+	Products          *mongo.Collection
+	Categories        *mongo.Collection
+	CartItems         *mongo.Collection
+	Orders            *mongo.Collection
+	UserProfiles      *mongo.Collection
+	UserPreferences   *mongo.Collection
+	UserAddresses     *mongo.Collection
+	Inventories       *mongo.Collection
+	Reviews           *mongo.Collection
+	Wishlists         *mongo.Collection
+	ChatConversations *mongo.Collection
+	ChatMessages      *mongo.Collection
+	Notifications     *mongo.Collection
+	Recommendations   *mongo.Collection
+	RecFeedbacks      *mongo.Collection
 } {
 	return struct {
-		Users              *mongo.Collection
-		Products           *mongo.Collection
-		CartItems          *mongo.Collection
-		Orders             *mongo.Collection
-		UserProfiles       *mongo.Collection
-		UserPreferences    *mongo.Collection
-		UserAddresses      *mongo.Collection
-		Inventories        *mongo.Collection
-		Reviews            *mongo.Collection
-		Wishlists          *mongo.Collection
-		ChatConversations  *mongo.Collection
-		ChatMessages       *mongo.Collection
-		Notifications      *mongo.Collection
-		Recommendations    *mongo.Collection
-		RecFeedbacks       *mongo.Collection
+		Users             *mongo.Collection
+		Products          *mongo.Collection
+		Categories        *mongo.Collection
+		CartItems         *mongo.Collection
+		Orders            *mongo.Collection
+		UserProfiles      *mongo.Collection
+		UserPreferences   *mongo.Collection
+		UserAddresses     *mongo.Collection
+		Inventories       *mongo.Collection
+		Reviews           *mongo.Collection
+		Wishlists         *mongo.Collection
+		ChatConversations *mongo.Collection
+		ChatMessages      *mongo.Collection
+		Notifications     *mongo.Collection
+		Recommendations   *mongo.Collection
+		RecFeedbacks      *mongo.Collection
 	}{
-		Users:              db.MongoDB.Collection("users"),
-		Products:           db.MongoDB.Collection("products"),
-		CartItems:          db.MongoDB.Collection("cart_items"),
-		Orders:             db.MongoDB.Collection("orders"),
-		UserProfiles:       db.MongoDB.Collection("user_profiles"),
-		UserPreferences:    db.MongoDB.Collection("user_preferences"),
-		UserAddresses:      db.MongoDB.Collection("user_addresses"),
-		Inventories:        db.MongoDB.Collection("inventories"),
-		Reviews:            db.MongoDB.Collection("reviews"),
-		Wishlists:          db.MongoDB.Collection("wishlists"),
-		ChatConversations:  db.MongoDB.Collection("chat_conversations"),
-		ChatMessages:       db.MongoDB.Collection("chat_messages"),
-		Notifications:      db.MongoDB.Collection("notifications"),
-		Recommendations:    db.MongoDB.Collection("recommendations"),
-		RecFeedbacks:       db.MongoDB.Collection("recommendation_feedbacks"),
+		Users:             db.MongoDB.Collection("users"),
+		Products:          db.MongoDB.Collection("products"),
+		Categories:        db.MongoDB.Collection("categories"),
+		CartItems:         db.MongoDB.Collection("cart_items"),
+		Orders:            db.MongoDB.Collection("orders"),
+		UserProfiles:      db.MongoDB.Collection("user_profiles"),
+		UserPreferences:   db.MongoDB.Collection("user_preferences"),
+		UserAddresses:     db.MongoDB.Collection("user_addresses"),
+		Inventories:       db.MongoDB.Collection("inventories"),
+		Reviews:           db.MongoDB.Collection("reviews"),
+		Wishlists:         db.MongoDB.Collection("wishlists"),
+		ChatConversations: db.MongoDB.Collection("chat_conversations"),
+		ChatMessages:      db.MongoDB.Collection("chat_messages"),
+		Notifications:     db.MongoDB.Collection("notifications"),
+		Recommendations:   db.MongoDB.Collection("recommendations"),
+		RecFeedbacks:      db.MongoDB.Collection("recommendation_feedbacks"),
 	}
 }
 
@@ -89,7 +92,7 @@ func (db *DBClient) CacheGet(ctx context.Context, key string, dest interface{}) 
 		}
 		return err
 	}
-	
+
 	return json.Unmarshal([]byte(val), dest)
 }
 
@@ -99,7 +102,7 @@ func (db *DBClient) CacheSet(ctx context.Context, key string, value interface{},
 	if err != nil {
 		return err
 	}
-	
+
 	return db.Redis.Set(ctx, key, data, expiration).Err()
 }
 
@@ -181,12 +184,12 @@ func (db *DBClient) UpdateByID(ctx context.Context, collection *mongo.Collection
 	if err != nil {
 		return err
 	}
-	
+
 	// Check if document was found
 	if result.MatchedCount == 0 {
 		return errors.New("document not found")
 	}
-	
+
 	return nil
 }
 
@@ -201,12 +204,12 @@ func (db *DBClient) DeleteByID(ctx context.Context, collection *mongo.Collection
 	if err != nil {
 		return err
 	}
-	
+
 	// Check if document was found
 	if result.DeletedCount == 0 {
 		return errors.New("document not found")
 	}
-	
+
 	return nil
 }
 
@@ -216,6 +219,6 @@ func (db *DBClient) DeleteMany(ctx context.Context, collection *mongo.Collection
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return result.DeletedCount, nil
 }

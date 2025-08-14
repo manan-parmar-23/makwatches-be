@@ -12,15 +12,18 @@ type CartItem struct {
 	UserID    primitive.ObjectID `json:"userId" bson:"user_id"`
 	ProductID primitive.ObjectID `json:"productId" bson:"product_id"`
 	Product   *Product           `json:"product,omitempty" bson:"product,omitempty"`
-	Quantity  int                `json:"quantity" bson:"quantity"`
-	CreatedAt time.Time          `json:"createdAt" bson:"created_at"`
-	UpdatedAt time.Time          `json:"updatedAt" bson:"updated_at"`
+	// Size selected by user (e.g., S, M, L). Optional to not break existing carts
+	Size      string    `json:"size,omitempty" bson:"size,omitempty"`
+	Quantity  int       `json:"quantity" bson:"quantity"`
+	CreatedAt time.Time `json:"createdAt" bson:"created_at"`
+	UpdatedAt time.Time `json:"updatedAt" bson:"updated_at"`
 }
 
 // CartItemRequest represents the data required for adding a product to cart
 type CartItemRequest struct {
 	ProductID string `json:"productId" validate:"required"`
 	Quantity  int    `json:"quantity" validate:"required,min=1"`
+	Size      string `json:"size,omitempty"`
 }
 
 // CartResponse represents the response for cart operations

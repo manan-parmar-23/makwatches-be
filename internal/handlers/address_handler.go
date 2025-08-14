@@ -32,7 +32,7 @@ func NewAddressBookHandler(db *database.DBClient, cfg *config.Config) *AddressBo
 // GetAddresses returns all addresses for the current user
 func (h *AddressBookHandler) GetAddresses(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -41,7 +41,7 @@ func (h *AddressBookHandler) GetAddresses(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Find all addresses
 	addressCollection := h.DB.Collections().UserAddresses
 	cursor, err := addressCollection.Find(ctx, bson.M{"user_id": user.UserID})
@@ -53,7 +53,7 @@ func (h *AddressBookHandler) GetAddresses(c *fiber.Ctx) error {
 		})
 	}
 	defer cursor.Close(ctx)
-	
+
 	// Decode the results
 	addresses := []models.UserAddress{}
 	if err := cursor.All(ctx, &addresses); err != nil {
@@ -63,7 +63,7 @@ func (h *AddressBookHandler) GetAddresses(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Addresses retrieved successfully",
@@ -74,7 +74,7 @@ func (h *AddressBookHandler) GetAddresses(c *fiber.Ctx) error {
 // GetAddress returns a single address by ID
 func (h *AddressBookHandler) GetAddress(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -83,7 +83,7 @@ func (h *AddressBookHandler) GetAddress(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Get address ID from parameters
 	addressID, err := primitive.ObjectIDFromHex(c.Params("id"))
 	if err != nil {
@@ -92,7 +92,7 @@ func (h *AddressBookHandler) GetAddress(c *fiber.Ctx) error {
 			"message": "Invalid address ID",
 		})
 	}
-	
+
 	// Find the address
 	var address models.UserAddress
 	addressCollection := h.DB.Collections().UserAddresses
@@ -100,7 +100,7 @@ func (h *AddressBookHandler) GetAddress(c *fiber.Ctx) error {
 		"_id":     addressID,
 		"user_id": user.UserID,
 	}).Decode(&address)
-	
+
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -114,7 +114,7 @@ func (h *AddressBookHandler) GetAddress(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Address retrieved successfully",
@@ -125,7 +125,7 @@ func (h *AddressBookHandler) GetAddress(c *fiber.Ctx) error {
 // CreateAddress adds a new address to the user's address book
 func (h *AddressBookHandler) CreateAddress(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -134,7 +134,7 @@ func (h *AddressBookHandler) CreateAddress(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Parse request body
 	var req models.UserAddressRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -144,7 +144,7 @@ func (h *AddressBookHandler) CreateAddress(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Create the new address
 	now := time.Now()
 	newAddress := models.UserAddress{
@@ -161,7 +161,7 @@ func (h *AddressBookHandler) CreateAddress(c *fiber.Ctx) error {
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	
+
 	// Check if this is the default address
 	addressCollection := h.DB.Collections().UserAddresses
 	if req.IsDefault {
@@ -188,12 +188,12 @@ func (h *AddressBookHandler) CreateAddress(c *fiber.Ctx) error {
 				"error":   err.Error(),
 			})
 		}
-		
+
 		if count == 0 {
 			newAddress.IsDefault = true
 		}
 	}
-	
+
 	// Insert the address
 	_, err := addressCollection.InsertOne(ctx, newAddress)
 	if err != nil {
@@ -203,7 +203,7 @@ func (h *AddressBookHandler) CreateAddress(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"success": true,
 		"message": "Address created successfully",
@@ -214,7 +214,7 @@ func (h *AddressBookHandler) CreateAddress(c *fiber.Ctx) error {
 // UpdateAddress updates an existing address
 func (h *AddressBookHandler) UpdateAddress(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -223,7 +223,7 @@ func (h *AddressBookHandler) UpdateAddress(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Get address ID from parameters
 	addressID, err := primitive.ObjectIDFromHex(c.Params("id"))
 	if err != nil {
@@ -232,7 +232,7 @@ func (h *AddressBookHandler) UpdateAddress(c *fiber.Ctx) error {
 			"message": "Invalid address ID",
 		})
 	}
-	
+
 	// Parse request body
 	var req models.UserAddressRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -242,7 +242,7 @@ func (h *AddressBookHandler) UpdateAddress(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Prepare the update
 	now := time.Now()
 	update := bson.M{
@@ -255,9 +255,9 @@ func (h *AddressBookHandler) UpdateAddress(c *fiber.Ctx) error {
 		"phone":      req.Phone,
 		"updated_at": now,
 	}
-	
+
 	addressCollection := h.DB.Collections().UserAddresses
-	
+
 	// Check if this is the default address
 	if req.IsDefault {
 		// Update existing default addresses
@@ -279,7 +279,7 @@ func (h *AddressBookHandler) UpdateAddress(c *fiber.Ctx) error {
 		}
 		update["is_default"] = true
 	}
-	
+
 	// Update the address
 	result, err := addressCollection.UpdateOne(
 		ctx,
@@ -289,7 +289,7 @@ func (h *AddressBookHandler) UpdateAddress(c *fiber.Ctx) error {
 		},
 		bson.M{"$set": update},
 	)
-	
+
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -297,14 +297,14 @@ func (h *AddressBookHandler) UpdateAddress(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	if result.MatchedCount == 0 {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"success": false,
 			"message": "Address not found or does not belong to you",
 		})
 	}
-	
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Address updated successfully",
@@ -314,7 +314,7 @@ func (h *AddressBookHandler) UpdateAddress(c *fiber.Ctx) error {
 // DeleteAddress removes an address from the user's address book
 func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -323,7 +323,7 @@ func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Get address ID from parameters
 	addressID, err := primitive.ObjectIDFromHex(c.Params("id"))
 	if err != nil {
@@ -332,7 +332,7 @@ func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 			"message": "Invalid address ID",
 		})
 	}
-	
+
 	// Find the address to check if it's default
 	var address models.UserAddress
 	addressCollection := h.DB.Collections().UserAddresses
@@ -340,7 +340,7 @@ func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 		"_id":     addressID,
 		"user_id": user.UserID,
 	}).Decode(&address)
-	
+
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -354,7 +354,7 @@ func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Delete the address
 	result, err := addressCollection.DeleteOne(
 		ctx,
@@ -363,7 +363,7 @@ func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 			"user_id": user.UserID,
 		},
 	)
-	
+
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -371,25 +371,25 @@ func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	if result.DeletedCount == 0 {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"success": false,
 			"message": "Address not found or does not belong to you",
 		})
 	}
-	
+
 	// If deleted address was default, set another address as default
 	if address.IsDefault {
 		limit := int64(1)
 		cursor, err := addressCollection.Find(
-			ctx, 
+			ctx,
 			bson.M{"user_id": user.UserID},
 			options.Find().
 				SetLimit(limit).
-				SetSort(bson.D{{"created_at", 1}}),
+				SetSort(bson.D{{Key: "created_at", Value: 1}}),
 		)
-		
+
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"success": false,
@@ -398,7 +398,7 @@ func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 			})
 		}
 		defer cursor.Close(ctx)
-		
+
 		var addresses []models.UserAddress
 		if err := cursor.All(ctx, &addresses); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -407,7 +407,7 @@ func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 				"error":   err.Error(),
 			})
 		}
-		
+
 		if len(addresses) > 0 {
 			// Set the first address as default
 			_, err = addressCollection.UpdateOne(
@@ -424,7 +424,7 @@ func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 			}
 		}
 	}
-	
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Address deleted successfully",
@@ -434,7 +434,7 @@ func (h *AddressBookHandler) DeleteAddress(c *fiber.Ctx) error {
 // SetDefaultAddress sets an address as the default
 func (h *AddressBookHandler) SetDefaultAddress(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -443,7 +443,7 @@ func (h *AddressBookHandler) SetDefaultAddress(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Get address ID from parameters
 	addressID, err := primitive.ObjectIDFromHex(c.Params("id"))
 	if err != nil {
@@ -452,10 +452,10 @@ func (h *AddressBookHandler) SetDefaultAddress(c *fiber.Ctx) error {
 			"message": "Invalid address ID",
 		})
 	}
-	
+
 	now := time.Now()
 	addressCollection := h.DB.Collections().UserAddresses
-	
+
 	// First, verify the address exists and belongs to the user
 	count, err := addressCollection.CountDocuments(
 		ctx,
@@ -464,7 +464,7 @@ func (h *AddressBookHandler) SetDefaultAddress(c *fiber.Ctx) error {
 			"user_id": user.UserID,
 		},
 	)
-	
+
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -472,14 +472,14 @@ func (h *AddressBookHandler) SetDefaultAddress(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	if count == 0 {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"success": false,
 			"message": "Address not found or does not belong to you",
 		})
 	}
-	
+
 	// Update existing default addresses
 	_, err = addressCollection.UpdateMany(
 		ctx,
@@ -496,7 +496,7 @@ func (h *AddressBookHandler) SetDefaultAddress(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Set the new default address
 	_, err = addressCollection.UpdateOne(
 		ctx,
@@ -506,7 +506,7 @@ func (h *AddressBookHandler) SetDefaultAddress(c *fiber.Ctx) error {
 		},
 		bson.M{"$set": bson.M{"is_default": true, "updated_at": now}},
 	)
-	
+
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -514,7 +514,7 @@ func (h *AddressBookHandler) SetDefaultAddress(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Address set as default successfully",

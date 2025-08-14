@@ -33,7 +33,7 @@ func NewRecommendationHandler(db *database.DBClient, cfg *config.Config) *Recomm
 // GetRecommendations returns product recommendations for the current user
 func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -55,12 +55,12 @@ func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 			"source":  "cache",
 		})
 	}
-	
+
 	// Get user preferences
 	var userPrefs models.UserPreferences
 	prefsCollection := h.DB.Collections().UserPreferences
 	err = prefsCollection.FindOne(ctx, bson.M{"user_id": user.UserID}).Decode(&userPrefs)
-	
+
 	// Query parameters
 	limit := 10
 	if c.Query("limit") != "" {
@@ -73,27 +73,27 @@ func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 	// Set up recommendation query
 	productCollection := h.DB.Collections().Products
 	findOptions := options.Find().SetLimit(int64(limit))
-	
+
 	// Base query - get products with sufficient stock
 	query := bson.M{"stock": bson.M{"$gt": 0}}
-	
+
 	// Add preference-based filters if available
 	if err == nil {
 		// If we have user preferences, use them to filter recommendations
-		
+
 		// Filter by categories if user has favorite categories
 		if len(userPrefs.FavoriteCategories) > 0 {
 			query["category"] = bson.M{"$in": userPrefs.FavoriteCategories}
 		}
-		
+
 		// Filter by price range if set
-		if userPrefs.PriceRange != nil && len(userPrefs.PriceRange) == 2 {
+		if len(userPrefs.PriceRange) == 2 {
 			query["price"] = bson.M{
 				"$gte": userPrefs.PriceRange[0],
 				"$lte": userPrefs.PriceRange[1],
 			}
 		}
-		
+
 		// Set sort order - newest products first, but give priority to favorite brands if available
 		if len(userPrefs.FavoriteBrands) > 0 {
 			// Add score field for sorting
@@ -111,20 +111,20 @@ func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 				},
 				{"$match": query},
 				{"$sort": bson.D{
-					{"brandScore", -1},
-					{"created_at", -1},
+					{Key: "brandScore", Value: -1},
+					{Key: "created_at", Value: -1},
 				}},
 				{"$limit": limit},
 			}
-			
+
 			// Execute aggregation pipeline
 			cursor, err := productCollection.Aggregate(ctx, pipeline)
 			if err != nil {
 				// Fall back to regular query if aggregation fails
-				findOptions.SetSort(bson.D{{"created_at", -1}})
+				findOptions.SetSort(bson.D{{Key: "created_at", Value: -1}})
 			} else {
 				defer cursor.Close(ctx)
-				
+
 				// Decode results
 				var products []models.Product
 				if err := cursor.All(ctx, &products); err != nil {
@@ -134,13 +134,13 @@ func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 						"error":   err.Error(),
 					})
 				}
-				
+
 				// Build response
 				recommendations := buildRecommendationsResponse(products)
-				
+
 				// Cache the results
 				h.DB.CacheSet(ctx, cacheKey, recommendations, 30*60) // 30 minutes
-				
+
 				return c.Status(fiber.StatusOK).JSON(fiber.Map{
 					"success": true,
 					"message": "Personalized recommendations retrieved successfully",
@@ -151,9 +151,9 @@ func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 		}
 	} else {
 		// If we don't have user preferences, just sort by popularity and creation date
-		findOptions.SetSort(bson.D{{"created_at", -1}})
+		findOptions.SetSort(bson.D{{Key: "created_at", Value: -1}})
 	}
-	
+
 	// Execute query
 	cursor, err := productCollection.Find(ctx, query, findOptions)
 	if err != nil {
@@ -164,7 +164,7 @@ func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 		})
 	}
 	defer cursor.Close(ctx)
-	
+
 	// Decode results
 	var products []models.Product
 	if err := cursor.All(ctx, &products); err != nil {
@@ -174,13 +174,13 @@ func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// If no products found based on preferences, get popular products
 	if len(products) == 0 {
 		cursor, err = productCollection.Find(
 			ctx,
 			bson.M{"stock": bson.M{"$gt": 0}},
-			options.Find().SetLimit(int64(limit)).SetSort(bson.D{{"created_at", -1}}),
+			options.Find().SetLimit(int64(limit)).SetSort(bson.D{{Key: "created_at", Value: -1}}),
 		)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -190,7 +190,7 @@ func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 			})
 		}
 		defer cursor.Close(ctx)
-		
+
 		if err := cursor.All(ctx, &products); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"success": false,
@@ -199,13 +199,13 @@ func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 			})
 		}
 	}
-	
+
 	// Build response
 	recommendations := buildRecommendationsResponse(products)
-	
+
 	// Cache the results
 	h.DB.CacheSet(ctx, cacheKey, recommendations, 30*60) // 30 minutes
-	
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Recommendations retrieved successfully",
@@ -217,7 +217,7 @@ func (h *RecommendationHandler) GetRecommendations(c *fiber.Ctx) error {
 // SubmitFeedback records user feedback for recommendations
 func (h *RecommendationHandler) SubmitFeedback(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -226,14 +226,14 @@ func (h *RecommendationHandler) SubmitFeedback(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Parse request body
 	var req struct {
 		ProductID string `json:"productId" validate:"required"`
 		Rating    int    `json:"rating" validate:"required,min=1,max=5"`
 		Action    string `json:"action" validate:"required,oneof=click view add_to_cart purchase dismiss"`
 	}
-	
+
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
@@ -241,7 +241,7 @@ func (h *RecommendationHandler) SubmitFeedback(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Convert string ID to ObjectID
 	productID, err := primitive.ObjectIDFromHex(req.ProductID)
 	if err != nil {
@@ -250,7 +250,7 @@ func (h *RecommendationHandler) SubmitFeedback(c *fiber.Ctx) error {
 			"message": "Invalid product ID",
 		})
 	}
-	
+
 	// Check if product exists
 	productCollection := h.DB.Collections().Products
 	var product models.Product
@@ -268,7 +268,7 @@ func (h *RecommendationHandler) SubmitFeedback(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Record feedback
 	now := time.Now()
 	feedback := models.RecommendationFeedback{
@@ -278,7 +278,7 @@ func (h *RecommendationHandler) SubmitFeedback(c *fiber.Ctx) error {
 		Action:    req.Action,
 		CreatedAt: now,
 	}
-	
+
 	_, err = h.DB.Collections().RecFeedbacks.InsertOne(ctx, feedback)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -287,11 +287,11 @@ func (h *RecommendationHandler) SubmitFeedback(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Update recommendation model (just clear the cache for now, could be more sophisticated)
 	cacheKey := fmt.Sprintf("recommendations:%s", user.UserID.Hex())
 	h.DB.CacheDel(ctx, cacheKey)
-	
+
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"success": true,
 		"message": "Feedback recorded successfully",

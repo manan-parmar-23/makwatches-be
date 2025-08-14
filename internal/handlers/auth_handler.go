@@ -20,8 +20,8 @@ import (
 
 // AuthHandler handles authentication related requests
 type AuthHandler struct {
-	DB        *database.DBClient
-	Config    *config.Config
+	DB          *database.DBClient
+	Config      *config.Config
 	GoogleOAuth *utils.GoogleOAuth
 }
 
@@ -32,10 +32,10 @@ func NewAuthHandler(db *database.DBClient, cfg *config.Config) *AuthHandler {
 		cfg.GoogleClientSecret,
 		cfg.GoogleRedirectURL,
 	)
-	
+
 	return &AuthHandler{
-		DB:        db,
-		Config:    cfg,
+		DB:          db,
+		Config:      cfg,
 		GoogleOAuth: googleOAuth,
 	}
 }
@@ -91,12 +91,17 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 
 	// Create new user
 	now := time.Now()
+	// Accept role from request if valid, else default to "user"
+	role := "user"
+	if req.Role == "admin" || req.Role == "user" {
+		role = req.Role
+	}
 	newUser := models.User{
 		ID:           primitive.NewObjectID(),
 		Name:         req.Name,
 		Email:        req.Email,
 		Password:     string(hashedPassword),
-		Role:         "user", // Default role
+		Role:         role,
 		AuthProvider: "local", // Local authentication
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -178,7 +183,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Check if user is using Google auth and trying to login with password
 	if user.AuthProvider == "google" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -206,6 +211,26 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
+	// Generate refresh token
+	refreshToken, err := h.generateRefreshToken(user.ID.Hex())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to generate refresh token",
+			"error":   err.Error(),
+		})
+	}
+
+	// Set refresh token in HTTP-only cookie
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Expires:  time.Now().Add(7 * 24 * time.Hour), // 7 days
+		HTTPOnly: true,
+		Secure:   true, // set to true in production
+		SameSite: "Strict",
+	})
+
 	// Return user info and token
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
@@ -228,13 +253,13 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 func (h *AuthHandler) GoogleLogin(c *fiber.Ctx) error {
 	// Generate a state token to prevent request forgery
 	state := fmt.Sprintf("%d", time.Now().UnixNano())
-	
+
 	// Log the state for debugging
 	fmt.Printf("Generated state: %s\n", state)
-	
+
 	// Store state in server-side storage instead of cookies
 	h.GoogleOAuth.SaveState(state)
-	
+
 	// Redirect to Google's OAuth page
 	authURL := h.GoogleOAuth.GetAuthURL(state)
 	return c.Redirect(authURL)
@@ -243,14 +268,14 @@ func (h *AuthHandler) GoogleLogin(c *fiber.Ctx) error {
 // GoogleCallback handles the callback from Google OAuth
 func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Extract code and state from query params
 	code := c.Query("code")
 	state := c.Query("state")
-	
+
 	// For debugging
 	fmt.Printf("Received state: %s\n", state)
-	
+
 	// Check for code parameter
 	if code == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -258,7 +283,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 			"message": "Missing code parameter",
 		})
 	}
-	
+
 	// Validate state using our server-side state store
 	if state == "" || !h.GoogleOAuth.ValidateState(state) {
 		// For development we'll continue anyway
@@ -269,7 +294,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 		//    "message": "Invalid state parameter",
 		// })
 	}
-	
+
 	// Exchange code for token
 	accessToken, err := h.GoogleOAuth.Exchange(code)
 	if err != nil {
@@ -279,7 +304,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Get user info from Google
 	userInfo, err := h.GoogleOAuth.GetUserInfo(accessToken)
 	if err != nil {
@@ -289,7 +314,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Extract user details
 	googleUser := models.GoogleUser{
 		ID:            userInfo["id"].(string),
@@ -298,18 +323,18 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 		Name:          userInfo["name"].(string),
 		Picture:       userInfo["picture"].(string),
 	}
-	
+
 	if !googleUser.VerifiedEmail {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"message": "Email not verified by Google",
 		})
 	}
-	
+
 	// Check if user exists in our database
 	collection := h.DB.Collections().Users
 	var user models.User
-	
+
 	// First try to find by Google ID
 	err = collection.FindOne(ctx, bson.M{"google_id": googleUser.ID}).Decode(&user)
 	if err == mongo.ErrNoDocuments {
@@ -329,7 +354,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 				CreatedAt:    now,
 				UpdatedAt:    now,
 			}
-			
+
 			_, err = collection.InsertOne(ctx, newUser)
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -338,7 +363,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 					"error":   err.Error(),
 				})
 			}
-			
+
 			user = newUser
 		} else if err != nil {
 			// Database error
@@ -358,7 +383,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 						"updated_at":    time.Now(),
 					},
 				}
-				
+
 				_, err = collection.UpdateOne(ctx, bson.M{"_id": user.ID}, update)
 				if err != nil {
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -367,7 +392,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 						"error":   err.Error(),
 					})
 				}
-				
+
 				// Update local user object
 				user.GoogleID = googleUser.ID
 				user.Picture = googleUser.Picture
@@ -390,7 +415,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 					"updated_at": time.Now(),
 				},
 			}
-			
+
 			_, err = collection.UpdateOne(ctx, bson.M{"_id": user.ID}, update)
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -399,12 +424,12 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 					"error":   err.Error(),
 				})
 			}
-			
+
 			// Update local user object
 			user.Picture = googleUser.Picture
 		}
 	}
-	
+
 	// Generate JWT token
 	token, err := h.generateToken(user.ID.Hex(), user.Role)
 	if err != nil {
@@ -414,13 +439,13 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Prepare frontend redirect URL with token
 	frontendURL := "http://localhost:3000" // Default for development
 	if h.Config.Environment == "production" {
 		frontendURL = "https://pehnaw.com" // Production URL
 	}
-	
+
 	// Redirect to frontend with token as query param
 	// In a real application, use a more secure method to pass the token
 	return c.Redirect(fmt.Sprintf("%s/auth/callback?token=%s", frontendURL, token))
@@ -436,10 +461,10 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	ctx := c.Context()
 	collection := h.DB.Collections().Users
-	
+
 	// Find user by ID
 	var userData models.User
 	objID := user.UserID
@@ -457,7 +482,7 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Return user info
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
@@ -473,6 +498,67 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 	})
 }
 
+// RefreshToken issues a new access token using the refresh token in the cookie
+func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
+	refreshToken := c.Cookies("refresh_token")
+	if refreshToken == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "No refresh token provided",
+		})
+	}
+
+	// Parse and validate the refresh token
+	token, err := jwt.Parse(refreshToken, func(token *jwt.Token) (interface{}, error) {
+		// Validate the signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return []byte(h.Config.JWTSecret), nil
+	})
+	if err != nil || !token.Valid {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid refresh token",
+		})
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || claims["userId"] == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid token claims",
+		})
+	}
+
+	userID := claims["userId"].(string)
+
+	// Optionally, check if user exists in DB
+	collection := h.DB.Collections().Users
+	var user models.User
+	err = collection.FindOne(c.Context(), bson.M{"_id": userID}).Decode(&user)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "User not found",
+		})
+	}
+
+	// Issue new access token
+	accessToken, err := h.generateToken(userID, user.Role)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to generate access token",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"token":   accessToken,
+	})
+}
+
 // generateToken generates a JWT token
 func (h *AuthHandler) generateToken(userID, role string) (string, error) {
 	// Create token
@@ -483,6 +569,25 @@ func (h *AuthHandler) generateToken(userID, role string) (string, error) {
 	claims["userId"] = userID
 	claims["role"] = role
 	claims["exp"] = time.Now().Add(time.Duration(h.Config.JWTExpirationHours) * time.Hour).Unix()
+
+	// Generate encoded token
+	tokenString, err := token.SignedString([]byte(h.Config.JWTSecret))
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
+}
+
+// generateRefreshToken generates a refresh token
+func (h *AuthHandler) generateRefreshToken(userID string) (string, error) {
+	// Create token
+	token := jwt.New(jwt.SigningMethodHS256)
+
+	// Set claims
+	claims := token.Claims.(jwt.MapClaims)
+	claims["userId"] = userID
+	claims["exp"] = time.Now().Add(30 * 24 * time.Hour).Unix() // 30 days
 
 	// Generate encoded token
 	tokenString, err := token.SignedString([]byte(h.Config.JWTSecret))

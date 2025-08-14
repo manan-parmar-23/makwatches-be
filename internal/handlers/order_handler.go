@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -34,7 +37,7 @@ func NewOrderHandler(db *database.DBClient, cfg *config.Config) *OrderHandler {
 // Checkout processes the checkout and creates an order
 func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -43,7 +46,7 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Parse request body
 	var req models.CheckoutRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -53,24 +56,24 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Validate request
-	if req.ShippingAddress.Street == "" || req.ShippingAddress.City == "" || 
-	   req.ShippingAddress.State == "" || req.ShippingAddress.ZipCode == "" || 
-	   req.ShippingAddress.Country == "" {
+	if req.ShippingAddress.Street == "" || req.ShippingAddress.City == "" ||
+		req.ShippingAddress.State == "" || req.ShippingAddress.ZipCode == "" ||
+		req.ShippingAddress.Country == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"message": "Complete shipping address is required",
 		})
 	}
-	
+
 	if req.PaymentInfo.Method == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"message": "Payment method is required",
 		})
 	}
-	
+
 	// Get the user's cart
 	cartCollection := h.DB.Collections().CartItems
 	cursor, err := cartCollection.Find(ctx, bson.M{"user_id": user.UserID})
@@ -82,7 +85,7 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 		})
 	}
 	defer cursor.Close(ctx)
-	
+
 	// Parse cart items
 	var cartItems []models.CartItem
 	if err := cursor.All(ctx, &cartItems); err != nil {
@@ -92,7 +95,7 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Check if cart is empty
 	if len(cartItems) == 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -100,12 +103,12 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 			"message": "Cart is empty",
 		})
 	}
-	
-	// Create order items and calculate total
+
+	// Create order items and calculate total (authoritative server-side)
 	var orderItems []models.OrderItem
 	var total float64
 	productsCollection := h.DB.Collections().Products
-	
+
 	for _, item := range cartItems {
 		// Get product details
 		var product models.Product
@@ -117,7 +120,7 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 				"error":   err.Error(),
 			})
 		}
-		
+
 		// Check if there's enough stock
 		if product.Stock < item.Quantity {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -125,19 +128,20 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 				"message": fmt.Sprintf("Not enough stock for product %s", product.Name),
 			})
 		}
-		
+
 		// Create order item
 		orderItem := models.OrderItem{
 			ProductID:   product.ID,
 			ProductName: product.Name,
 			Price:       product.Price,
+			Size:        item.Size,
 			Quantity:    item.Quantity,
 			Subtotal:    product.Price * float64(item.Quantity),
 		}
-		
+
 		orderItems = append(orderItems, orderItem)
 		total += orderItem.Subtotal
-		
+
 		// Update product stock
 		_, err = productsCollection.UpdateOne(
 			ctx,
@@ -151,26 +155,51 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 				"error":   err.Error(),
 			})
 		}
-		
+
 		// Invalidate product cache
 		productCacheKey := fmt.Sprintf("product:%s", product.ID.Hex())
 		h.DB.CacheDel(ctx, productCacheKey)
 	}
-	
+
+	// Verify Razorpay signature if method is razorpay
+	if req.PaymentInfo.Method == "razorpay" {
+		if req.PaymentInfo.RazorpayOrderID == "" || req.PaymentInfo.RazorpayPaymentID == "" || req.PaymentInfo.RazorpaySignature == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Missing Razorpay payment details"})
+		}
+		mac := hmac.New(sha256.New, []byte(h.Config.RazorpaySecret))
+		mac.Write([]byte(req.PaymentInfo.RazorpayOrderID + "|" + req.PaymentInfo.RazorpayPaymentID))
+		expected := hex.EncodeToString(mac.Sum(nil))
+		if expected != req.PaymentInfo.RazorpaySignature {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid payment signature"})
+		}
+	}
+
+	// Defensive: If client supplied a clientTotal ensure it matches authoritative total
+	if req.ClientTotal != nil {
+		clientTotal := *req.ClientTotal
+		// Allow small rounding difference (₹1)
+		if clientTotal < total-1 || clientTotal > total+1 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"success": false,
+				"message": fmt.Sprintf("Total mismatch. Client: %.2f Server: %.2f", clientTotal, total),
+			})
+		}
+	}
+
 	// Create the order
 	now := time.Now()
 	order := models.Order{
-		ID:             primitive.NewObjectID(),
-		UserID:         user.UserID,
-		Items:          orderItems,
-		Total:          total,
-		Status:         "pending",
+		ID:              primitive.NewObjectID(),
+		UserID:          user.UserID,
+		Items:           orderItems,
+		Total:           total,
+		Status:          "pending",
 		ShippingAddress: req.ShippingAddress,
-		PaymentInfo:    req.PaymentInfo,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		PaymentInfo:     req.PaymentInfo,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
-	
+
 	// Insert the order into the database
 	orderCollection := h.DB.Collections().Orders
 	_, err = orderCollection.InsertOne(ctx, order)
@@ -181,7 +210,7 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Clear the user's cart
 	_, err = cartCollection.DeleteMany(ctx, bson.M{"user_id": user.UserID})
 	if err != nil {
@@ -191,15 +220,15 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Invalidate cart cache
 	cartCacheKey := fmt.Sprintf("cart:%s", user.UserID.Hex())
 	h.DB.CacheDel(ctx, cartCacheKey)
-	
+
 	// Invalidate order cache
 	ordersCacheKey := fmt.Sprintf("orders:%s", user.UserID.Hex())
 	h.DB.CacheDel(ctx, ordersCacheKey)
-	
+
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"success": true,
 		"message": "Order placed successfully",
@@ -210,35 +239,42 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 // GetOrders retrieves order history for a user
 func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
-	// Get user ID from URL parameter
-	userIDParam := c.Params("userID")
-	if userIDParam == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "User ID is required",
-		})
-	}
-	
-	// Convert user ID from string to ObjectID
-	userID, err := primitive.ObjectIDFromHex(userIDParam)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "Invalid user ID format",
-			"error":   err.Error(),
-		})
-	}
-	
-	// Check if the user is authorized to view these orders
+
+	// Determine the target user ID from route params or the authenticated token
 	tokenUser, ok := c.Locals("user").(*middleware.TokenMetadata)
-	if !ok || (tokenUser.UserID != userID && tokenUser.Role != "admin") {
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "Unauthorized - User data not found",
+		})
+	}
+
+	userIDParam := c.Params("userID")
+	var userID primitive.ObjectID
+	var err error
+	if userIDParam == "" {
+		// If no param provided (e.g., /account/orders), default to the authenticated user's ID
+		userID = tokenUser.UserID
+	} else {
+		// Convert user ID from string to ObjectID
+		userID, err = primitive.ObjectIDFromHex(userIDParam)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"success": false,
+				"message": "Invalid user ID format",
+				"error":   err.Error(),
+			})
+		}
+	}
+
+	// Authorization: user can view own orders; admin can view any user's orders
+	if tokenUser.UserID != userID && tokenUser.Role != "admin" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"success": false,
 			"message": "Not authorized to view these orders",
 		})
 	}
-	
+
 	// Check if the orders are in Redis cache
 	cacheKey := fmt.Sprintf("orders:%s", userID.Hex())
 	var orders []models.Order
@@ -251,7 +287,7 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 			"data":    orders,
 		})
 	}
-	
+
 	// Find all orders for the user, sorted by creation date descending
 	orderCollection := h.DB.Collections().Orders
 	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
@@ -264,7 +300,7 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 		})
 	}
 	defer cursor.Close(ctx)
-	
+
 	// Parse the results
 	if err := cursor.All(ctx, &orders); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -273,22 +309,49 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
+	// Map orders to convert ObjectID to hex string for frontend
+	type OrderResponse struct {
+		ID              string             `json:"id"`
+		UserID          string             `json:"userId"`
+		Items           []models.OrderItem `json:"items"`
+		Total           float64            `json:"total"`
+		Status          string             `json:"status"`
+		ShippingAddress models.Address     `json:"shippingAddress"`
+		PaymentInfo     models.PaymentInfo `json:"paymentInfo"`
+		CreatedAt       time.Time          `json:"createdAt"`
+		UpdatedAt       time.Time          `json:"updatedAt"`
+	}
+	var respOrders []OrderResponse
+	for _, o := range orders {
+		respOrders = append(respOrders, OrderResponse{
+			ID:              o.ID.Hex(),
+			UserID:          o.UserID.Hex(),
+			Items:           o.Items,
+			Total:           o.Total,
+			Status:          o.Status,
+			ShippingAddress: o.ShippingAddress,
+			PaymentInfo:     o.PaymentInfo,
+			CreatedAt:       o.CreatedAt,
+			UpdatedAt:       o.UpdatedAt,
+		})
+	}
+
 	// Cache the orders (expire after 15 minutes)
-	h.DB.CacheSet(ctx, cacheKey, orders, 15*time.Minute)
-	
+	h.DB.CacheSet(ctx, cacheKey, respOrders, 15*time.Minute)
+
 	// Return the orders
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Orders retrieved successfully",
-		"data":    orders,
+		"data":    respOrders,
 	})
 }
 
 // GetOrder retrieves a specific order by ID
 func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get order ID from URL parameter
 	orderIDParam := c.Params("orderID")
 	if orderIDParam == "" {
@@ -297,7 +360,7 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 			"message": "Order ID is required",
 		})
 	}
-	
+
 	// Convert order ID from string to ObjectID
 	orderID, err := primitive.ObjectIDFromHex(orderIDParam)
 	if err != nil {
@@ -307,7 +370,7 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Check if the order is in Redis cache
 	cacheKey := fmt.Sprintf("order:%s", orderID.Hex())
 	var order models.Order
@@ -322,14 +385,14 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 				"message": "Not authorized to view this order",
 			})
 		}
-		
+
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"success": true,
 			"message": "Order retrieved from cache",
 			"data":    order,
 		})
 	}
-	
+
 	// Find the order in the database
 	orderCollection := h.DB.Collections().Orders
 	err = orderCollection.FindOne(ctx, bson.M{"_id": orderID}).Decode(&order)
@@ -346,7 +409,7 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Check if the user is authorized to view this order
 	tokenUser, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok || (order.UserID != tokenUser.UserID && tokenUser.Role != "admin") {
@@ -355,10 +418,10 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 			"message": "Not authorized to view this order",
 		})
 	}
-	
+
 	// Cache the order (expire after 15 minutes)
 	h.DB.CacheSet(ctx, cacheKey, order, 15*time.Minute)
-	
+
 	// Return the order
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
@@ -370,7 +433,7 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 // UpdateOrderStatus updates the status of an order (admin only)
 func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Only admin can update order status
 	tokenUser, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok || tokenUser.Role != "admin" {
@@ -379,7 +442,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 			"message": "Only admins can update order status",
 		})
 	}
-	
+
 	// Get order ID from URL parameter
 	orderIDParam := c.Params("orderID")
 	if orderIDParam == "" {
@@ -388,7 +451,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 			"message": "Order ID is required",
 		})
 	}
-	
+
 	// Convert order ID from string to ObjectID
 	orderID, err := primitive.ObjectIDFromHex(orderIDParam)
 	if err != nil {
@@ -398,7 +461,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Parse request body
 	type StatusUpdate struct {
 		Status string `json:"status"`
@@ -411,7 +474,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Validate status
 	validStatuses := map[string]bool{
 		"pending":    true,
@@ -421,14 +484,14 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 		"cancelled":  true,
 		"returned":   true,
 	}
-	
+
 	if !validStatuses[req.Status] {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"message": "Invalid order status. Must be one of: pending, processing, shipped, delivered, cancelled, returned",
 		})
 	}
-	
+
 	// Update the order status
 	now := time.Now()
 	orderCollection := h.DB.Collections().Orders
@@ -442,7 +505,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 			},
 		},
 	)
-	
+
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -450,14 +513,14 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	if result.MatchedCount == 0 {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"success": false,
 			"message": "Order not found",
 		})
 	}
-	
+
 	// Get the updated order
 	var updatedOrder models.Order
 	err = orderCollection.FindOne(ctx, bson.M{"_id": orderID}).Decode(&updatedOrder)
@@ -468,13 +531,13 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Invalidate order caches
 	orderCacheKey := fmt.Sprintf("order:%s", orderID.Hex())
 	userOrdersCacheKey := fmt.Sprintf("orders:%s", updatedOrder.UserID.Hex())
 	h.DB.CacheDel(ctx, orderCacheKey)
 	h.DB.CacheDel(ctx, userOrdersCacheKey)
-	
+
 	// Return the updated order
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
@@ -486,7 +549,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 // CancelOrder cancels an order if it's still in "pending" or "processing" status
 func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get order ID from URL parameter
 	orderIDParam := c.Params("orderID")
 	if orderIDParam == "" {
@@ -495,7 +558,7 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 			"message": "Order ID is required",
 		})
 	}
-	
+
 	// Convert order ID from string to ObjectID
 	orderID, err := primitive.ObjectIDFromHex(orderIDParam)
 	if err != nil {
@@ -505,7 +568,7 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Get the order
 	orderCollection := h.DB.Collections().Orders
 	var order models.Order
@@ -523,7 +586,7 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Check if the user is authorized to cancel this order
 	tokenUser, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok || (order.UserID != tokenUser.UserID && tokenUser.Role != "admin") {
@@ -532,7 +595,7 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 			"message": "Not authorized to cancel this order",
 		})
 	}
-	
+
 	// Check if the order can be cancelled
 	if order.Status != "pending" && order.Status != "processing" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -540,7 +603,7 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 			"message": "Only pending or processing orders can be cancelled",
 		})
 	}
-	
+
 	// Update the order status to "cancelled"
 	now := time.Now()
 	_, err = orderCollection.UpdateOne(
@@ -553,7 +616,7 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 			},
 		},
 	)
-	
+
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -561,7 +624,7 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Return inventory to stock
 	productsCollection := h.DB.Collections().Products
 	for _, item := range order.Items {
@@ -574,21 +637,84 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 			// Log error but continue processing
 			fmt.Printf("Error restoring inventory for product %s: %v\n", item.ProductID.Hex(), err)
 		}
-		
+
 		// Invalidate product cache
 		productCacheKey := fmt.Sprintf("product:%s", item.ProductID.Hex())
 		h.DB.CacheDel(ctx, productCacheKey)
 	}
-	
+
 	// Invalidate order caches
 	orderCacheKey := fmt.Sprintf("order:%s", orderID.Hex())
 	userOrdersCacheKey := fmt.Sprintf("orders:%s", order.UserID.Hex())
 	h.DB.CacheDel(ctx, orderCacheKey)
 	h.DB.CacheDel(ctx, userOrdersCacheKey)
-	
+
 	// Return success response
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Order cancelled successfully",
+	})
+}
+
+// GetAllOrders returns all orders (admin only)
+func (h *OrderHandler) GetAllOrders(c *fiber.Ctx) error {
+	ctx := c.Context()
+	// Only admin can access
+	tokenUser, ok := c.Locals("user").(*middleware.TokenMetadata)
+	if !ok || tokenUser.Role != "admin" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"success": false,
+			"message": "Not authorized",
+		})
+	}
+	orderCollection := h.DB.Collections().Orders
+	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
+	cursor, err := orderCollection.Find(ctx, bson.M{}, opts)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to retrieve orders",
+			"error":   err.Error(),
+		})
+	}
+	defer cursor.Close(ctx)
+	var orders []models.Order
+	if err := cursor.All(ctx, &orders); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to decode orders",
+			"error":   err.Error(),
+		})
+	}
+	// Map orders to frontend format if needed
+	type OrderResponse struct {
+		ID              string             `json:"id"`
+		UserID          string             `json:"userId"`
+		Items           []models.OrderItem `json:"items"`
+		Total           float64            `json:"total"`
+		Status          string             `json:"status"`
+		ShippingAddress models.Address     `json:"shippingAddress"`
+		PaymentInfo     models.PaymentInfo `json:"paymentInfo"`
+		CreatedAt       time.Time          `json:"createdAt"`
+		UpdatedAt       time.Time          `json:"updatedAt"`
+	}
+	var respOrders []OrderResponse
+	for _, o := range orders {
+		respOrders = append(respOrders, OrderResponse{
+			ID:              o.ID.Hex(),
+			UserID:          o.UserID.Hex(),
+			Items:           o.Items,
+			Total:           o.Total,
+			Status:          o.Status,
+			ShippingAddress: o.ShippingAddress,
+			PaymentInfo:     o.PaymentInfo,
+			CreatedAt:       o.CreatedAt,
+			UpdatedAt:       o.UpdatedAt,
+		})
+	}
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "All orders retrieved",
+		"data":    respOrders,
 	})
 }
