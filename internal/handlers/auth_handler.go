@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -262,6 +264,8 @@ func (h *AuthHandler) GoogleLogin(c *fiber.Ctx) error {
 
 	// Redirect to Google's OAuth page
 	authURL := h.GoogleOAuth.GetAuthURL(state)
+	// Log the auth URL for debugging redirect_uri mismatch issues
+	fmt.Printf("Google Auth URL: %s\n", authURL)
 	return c.Redirect(authURL)
 }
 
@@ -278,10 +282,13 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 
 	// Check for code parameter
 	if code == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "Missing code parameter",
-		})
+		// Redirect to frontend callback with error so UI can show a message
+		frontendURL := "http://localhost:3000"
+		if h.Config != nil && h.Config.Environment == "production" {
+			frontendURL = "https://pehnaw.com"
+		}
+		redirectErr := url.QueryEscape("missing_code")
+		return c.Redirect(fmt.Sprintf("%s/auth/callback?error=%s", frontendURL, redirectErr))
 	}
 
 	// Validate state using our server-side state store
@@ -298,30 +305,67 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 	// Exchange code for token
 	accessToken, err := h.GoogleOAuth.Exchange(code)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "Failed to exchange code for token",
-			"error":   err.Error(),
-		})
+		// Log detailed error and redirect to frontend with an error token
+		fmt.Printf("Google token exchange failed: %v\n", err)
+		frontendURL := "http://localhost:3000"
+		if h.Config != nil && h.Config.Environment == "production" {
+			frontendURL = "https://pehnaw.com"
+		}
+		// Include a short encoded error message so frontend can show it
+		redirectErr := url.QueryEscape("token_exchange_failed")
+		return c.Redirect(fmt.Sprintf("%s/auth/callback?error=%s", frontendURL, redirectErr))
 	}
 
 	// Get user info from Google
 	userInfo, err := h.GoogleOAuth.GetUserInfo(accessToken)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "Failed to get user info from Google",
-			"error":   err.Error(),
-		})
+		fmt.Printf("Google GetUserInfo failed: %v\n", err)
+		frontendURL := "http://localhost:3000"
+		if h.Config != nil && h.Config.Environment == "production" {
+			frontendURL = "https://pehnaw.com"
+		}
+		redirectErr := url.QueryEscape("userinfo_failed")
+		return c.Redirect(fmt.Sprintf("%s/auth/callback?error=%s", frontendURL, redirectErr))
 	}
 
-	// Extract user details
+	// Safely extract user details (handle bool vs *bool and different underlying types)
+	getStr := func(key string) string {
+		if v, ok := userInfo[key]; ok && v != nil {
+			switch s := v.(type) {
+			case string:
+				return s
+			case []byte:
+				return string(s)
+			case fmt.Stringer:
+				return s.String()
+			default:
+				return fmt.Sprintf("%v", v)
+			}
+		}
+		return ""
+	}
+	getBool := func(key string) bool {
+		if v, ok := userInfo[key]; ok && v != nil {
+			switch b := v.(type) {
+			case bool:
+				return b
+			case *bool:
+				return *b
+			case string:
+				return strings.EqualFold(b, "true")
+			default:
+				return false
+			}
+		}
+		return false
+	}
+
 	googleUser := models.GoogleUser{
-		ID:            userInfo["id"].(string),
-		Email:         userInfo["email"].(string),
-		VerifiedEmail: userInfo["verified_email"].(bool),
-		Name:          userInfo["name"].(string),
-		Picture:       userInfo["picture"].(string),
+		ID:            getStr("id"),
+		Email:         getStr("email"),
+		VerifiedEmail: getBool("verified_email"),
+		Name:          getStr("name"),
+		Picture:       getStr("picture"),
 	}
 
 	if !googleUser.VerifiedEmail {
@@ -531,12 +575,39 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 		})
 	}
 
-	userID := claims["userId"].(string)
+	// Normalize userId from claims to hex string
+	var userIDHex string
+	switch v := claims["userId"].(type) {
+	case string:
+		userIDHex = v
+	case primitive.ObjectID:
+		userIDHex = v.Hex()
+	case fmt.Stringer:
+		userIDHex = v.String()
+	default:
+		userIDHex = fmt.Sprintf("%v", v)
+	}
+
+	if userIDHex == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid token userId",
+		})
+	}
+
+	// Convert to ObjectID for DB lookup
+	objID, err := primitive.ObjectIDFromHex(userIDHex)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid user ID format",
+		})
+	}
 
 	// Optionally, check if user exists in DB
 	collection := h.DB.Collections().Users
 	var user models.User
-	err = collection.FindOne(c.Context(), bson.M{"_id": userID}).Decode(&user)
+	err = collection.FindOne(c.Context(), bson.M{"_id": objID}).Decode(&user)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
@@ -545,7 +616,7 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	}
 
 	// Issue new access token
-	accessToken, err := h.generateToken(userID, user.Role)
+	accessToken, err := h.generateToken(userIDHex, user.Role)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
