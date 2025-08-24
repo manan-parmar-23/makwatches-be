@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -44,19 +45,23 @@ func NewCategoryHandler(db *database.DBClient, cfg *config.Config) *CategoryHand
 //	}
 func (h *CategoryHandler) CreateCategory(c *fiber.Ctx) error {
 	ctx := c.Context()
-	var req models.CreateCategoryRequest
-	if err := c.BodyParser(&req); err != nil {
+	// Parse payload allowing subcategories to be either []string or []SubcategoryInput
+	var raw struct {
+		Name          string          `json:"name"`
+		Subcategories json.RawMessage `json:"subcategories"`
+	}
+	if err := c.BodyParser(&raw); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid request body", "error": err.Error()})
 	}
 
-	if req.Name != "Men" && req.Name != "Women" {
+	if raw.Name != "Men" && raw.Name != "Women" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Category name must be 'Men' or 'Women'"})
 	}
 
 	collection := h.DB.Collections().Categories
 
 	// Ensure category uniqueness (Men/Women only once)
-	count, err := collection.CountDocuments(ctx, bson.M{"name": req.Name})
+	count, err := collection.CountDocuments(ctx, bson.M{"name": raw.Name})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "Database error", "error": err.Error()})
 	}
@@ -65,17 +70,36 @@ func (h *CategoryHandler) CreateCategory(c *fiber.Ctx) error {
 	}
 
 	now := time.Now()
-	subcats := make([]models.Subcategory, 0, len(req.Subcategories))
-	for _, s := range req.Subcategories {
-		if s == "" {
-			continue
+	subcats := make([]models.Subcategory, 0)
+	if len(raw.Subcategories) > 0 && string(raw.Subcategories) != "null" {
+		// Try []string first
+		var names []string
+		if err := json.Unmarshal(raw.Subcategories, &names); err == nil {
+			for _, s := range names {
+				if s == "" {
+					continue
+				}
+				subcats = append(subcats, models.Subcategory{ID: primitive.NewObjectID(), Name: s})
+			}
+		} else {
+			// Try []SubcategoryInput
+			var inputs []models.SubcategoryInput
+			if err2 := json.Unmarshal(raw.Subcategories, &inputs); err2 == nil {
+				for _, in := range inputs {
+					if in.Name == "" {
+						continue
+					}
+					subcats = append(subcats, models.Subcategory{ID: primitive.NewObjectID(), Name: in.Name, ImageURL: in.ImageURL})
+				}
+			} else {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid subcategories format"})
+			}
 		}
-		subcats = append(subcats, models.Subcategory{ID: primitive.NewObjectID(), Name: s})
 	}
 
 	cat := models.Category{
 		ID:            primitive.NewObjectID(),
-		Name:          req.Name,
+		Name:          raw.Name,
 		Subcategories: subcats,
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -104,12 +128,12 @@ func (h *CategoryHandler) AddSubcategory(c *fiber.Ctx) error {
 
 	var req models.AddSubcategoryRequest
 	if err := c.BodyParser(&req); err != nil || req.Name == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid subcategory name"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid subcategory"})
 	}
 
 	collection := h.DB.Collections().Categories
 
-	subcat := models.Subcategory{ID: primitive.NewObjectID(), Name: req.Name}
+	subcat := models.Subcategory{ID: primitive.NewObjectID(), Name: req.Name, ImageURL: req.ImageURL}
 	update := bson.M{
 		"$push": bson.M{"subcategories": subcat},
 		"$set":  bson.M{"updated_at": time.Now()},
@@ -170,15 +194,31 @@ func (h *CategoryHandler) UpdateSubcategoryName(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid subcategory id"})
 	}
 
-	var req models.UpdateNameRequest
-	if err := c.BodyParser(&req); err != nil || req.Name == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid name"})
+	// Accept payloads to update name and/or imageUrl
+	var req models.UpdateSubcategoryRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid payload"})
+	}
+	if (req.Name == nil || *req.Name == "") && req.ImageURL == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Nothing to update"})
 	}
 
 	collection := h.DB.Collections().Categories
 
 	filter := bson.M{"_id": catObj, "subcategories._id": subObj}
-	update := bson.M{"$set": bson.M{"subcategories.$.name": req.Name, "updated_at": time.Now()}}
+	set := bson.M{"updated_at": time.Now()}
+	if req.Name != nil && *req.Name != "" {
+		set["subcategories.$.name"] = *req.Name
+	}
+	if req.ImageURL != nil {
+		// Allow clearing image when empty string provided
+		if *req.ImageURL == "" {
+			set["subcategories.$.image_url"] = nil
+		} else {
+			set["subcategories.$.image_url"] = *req.ImageURL
+		}
+	}
+	update := bson.M{"$set": set}
 
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	res := collection.FindOneAndUpdate(ctx, filter, update, opts)

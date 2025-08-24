@@ -54,6 +54,11 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	products := app.Group("/products")
 	products.Get("/", productHandler.GetProducts)
 	products.Get("/:id", productHandler.GetProductByID)
+	// Product reviews (public)
+	// GET /products/:id/reviews
+	// Use ReviewHandler to serve product-level reviews
+	reviewHandler := NewReviewHandler(db, cfg)
+	products.Get("/:productId/reviews", reviewHandler.GetProductReviews)
 
 	// Public catalog (optimized) product routes
 	catalog := app.Group("/catalog")
@@ -76,6 +81,15 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 
 	// Protected routes
 	api := app.Group("/", middleware.Auth(cfg.JWTSecret))
+
+	// Review routes (authenticated)
+	// POST /reviews -> CreateReview
+	reviews := api.Group("/reviews")
+	reviews.Post("/", reviewHandler.CreateReview)
+	// Optional: allow updating/deleting reviews by owner
+	reviews.Put("/:id", reviewHandler.UpdateReview)
+	reviews.Delete("/:id", reviewHandler.DeleteReview)
+	reviews.Post("/:id/helpful", reviewHandler.MarkReviewHelpful)
 
 	// User "me" endpoint
 	api.Get("/me", authHandler.Me)
@@ -153,6 +167,8 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	account.Get("/overview", accountHandler.GetAccountOverview)
 	account.Get("/reviews", accountHandler.GetAccountReviews)
 	account.Delete("/reviews/:id", accountHandler.DeleteAccountReview)
+	// Create a review under account scope as well
+	account.Post("/reviews", reviewHandler.CreateReview)
 	account.Get("/wishlist", accountHandler.GetAccountWishlist)
 	account.Delete("/wishlist/:id", accountHandler.RemoveAccountWishlistItem)
 	account.Get("/orders", accountHandler.GetAccountOrders)

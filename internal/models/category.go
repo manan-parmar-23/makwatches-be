@@ -19,6 +19,8 @@ type Category struct {
 type Subcategory struct {
 	ID   primitive.ObjectID `json:"id" bson:"_id,omitempty"`
 	Name string             `json:"name" bson:"name"`
+	// ImageURL is an optional image associated with the subcategory
+	ImageURL string `json:"imageUrl,omitempty" bson:"image_url,omitempty"`
 }
 
 // CreateCategoryRequest request body for creating a category
@@ -37,7 +39,8 @@ type CreateCategoryRequest struct {
 // Example:
 // { "name": "Shoes" }
 type AddSubcategoryRequest struct {
-	Name string `json:"name"`
+	Name     string `json:"name"`
+	ImageURL string `json:"imageUrl"`
 }
 
 // UpdateNameRequest used for updating category or subcategory names
@@ -45,4 +48,18 @@ type AddSubcategoryRequest struct {
 // { "name": "Women" }
 type UpdateNameRequest struct {
 	Name string `json:"name"`
+}
+
+// UpdateSubcategoryRequest allows updating subcategory fields optionally
+// Example:
+// { "name": "Sneakers", "imageUrl": "https://..." }
+type UpdateSubcategoryRequest struct {
+	Name     *string `json:"name"`
+	ImageURL *string `json:"imageUrl"`
+}
+
+// SubcategoryInput represents input for creating subcategories with optional image
+type SubcategoryInput struct {
+	Name     string `json:"name"`
+	ImageURL string `json:"imageUrl"`
 }
