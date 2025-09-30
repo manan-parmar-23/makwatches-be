@@ -42,6 +42,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	addressBookHandler := NewAddressBookHandler(db, cfg)
 	adminAccountHandler := &AdminAccountHandler{DB: db}
 	categoryHandler := NewCategoryHandler(db, cfg)
+	homeContentHandler := NewHomeContentHandler(db)
 
 	// Auth routes
 	auth := app.Group("/auth")
@@ -68,6 +69,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	// Public category routes (no auth) - read-only for storefront
 	app.Get("/categories", categoryHandler.GetPublicCategories)
 	app.Get("/categories/:name/subcategories", categoryHandler.GetPublicSubcategories)
+	app.Get("/home-content", homeContentHandler.GetHomeContent)
 
 	// Public (or auth-protected) upload route for admin (requires auth+role)
 	app.Static("/uploads", "uploads")
@@ -123,6 +125,31 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	admin.Get("/settings", settingsHandler.GetSettings())
 	admin.Put("/settings", settingsHandler.UpdateSettings())
 	admin.Post("/settings/logo", settingsHandler.UploadLogo())
+
+	// Home content management routes
+	adminHome := admin.Group("/home-content")
+	adminHome.Get("/hero-slides", homeContentHandler.ListHeroSlides)
+	adminHome.Post("/hero-slides", homeContentHandler.CreateHeroSlide)
+	adminHome.Put("/hero-slides/:id", homeContentHandler.UpdateHeroSlide)
+	adminHome.Delete("/hero-slides/:id", homeContentHandler.DeleteHeroSlide)
+
+	adminHome.Get("/categories", homeContentHandler.ListCategoryCards)
+	adminHome.Post("/categories", homeContentHandler.CreateCategoryCard)
+	adminHome.Put("/categories/:id", homeContentHandler.UpdateCategoryCard)
+	adminHome.Delete("/categories/:id", homeContentHandler.DeleteCategoryCard)
+
+	adminHome.Get("/collections", homeContentHandler.ListCollectionFeatures)
+	adminHome.Post("/collections", homeContentHandler.CreateCollectionFeature)
+	adminHome.Put("/collections/:id", homeContentHandler.UpdateCollectionFeature)
+	adminHome.Delete("/collections/:id", homeContentHandler.DeleteCollectionFeature)
+
+	adminHome.Get("/tech-cards", homeContentHandler.ListTechCards)
+	adminHome.Post("/tech-cards", homeContentHandler.CreateTechCard)
+	adminHome.Put("/tech-cards/:id", homeContentHandler.UpdateTechCard)
+	adminHome.Delete("/tech-cards/:id", homeContentHandler.DeleteTechCard)
+	adminHome.Get("/tech-highlight", homeContentHandler.GetTechHighlight)
+	adminHome.Put("/tech-highlight", homeContentHandler.UpsertTechHighlight)
+	adminHome.Delete("/tech-highlight", homeContentHandler.DeleteTechHighlight)
 
 	// Category management routes (/admin/categories)
 	adminCategories := admin.Group("/categories")
