@@ -1,7 +1,7 @@
 .PHONY: build run dev test clean lint vet
 
 # Application name
-APP_NAME=pehnaw-be
+APP_NAME=makwatches-be
 
 # Main application entrypoint
 MAIN_PATH=./cmd/api

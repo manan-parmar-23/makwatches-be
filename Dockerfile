@@ -1,5 +1,5 @@
 # Builder stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -15,7 +15,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o pehnaw-be ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o makwatches-be ./cmd/api
 
 # Final stage
 FROM alpine:3.18
@@ -27,7 +27,7 @@ WORKDIR /app
 RUN apk --no-cache add ca-certificates tzdata
 
 # Copy binary from builder
-COPY --from=builder /app/pehnaw-be .
+COPY --from=builder /app/makwatches-be .
 
 # Copy example.env file
 COPY example.env .env
@@ -36,4 +36,4 @@ COPY example.env .env
 EXPOSE 8080
 
 # Command to run the application
-CMD ["./pehnaw-be"]
+CMD ["./makwatches-be"]
