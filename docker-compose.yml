@@ -1,51 +1,43 @@
 version: '3.8'
 
 services:
-  app:
+  api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: pehnaw-api
+    image: makwatches-be:local
+    container_name: makwatches-be
     ports:
       - "8080:8080"
     environment:
       - ENVIRONMENT=development
       - PORT=8080
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pehnaw
+      # Point API to the MongoDB container
+      - MONGO_URI=mongodb://mongodb:27017
+      - DATABASE_NAME=pehnaw
+      # Point API to the Redis container (optional, app continues without Redis if down)
+      - REDIS_URI=redis:6379
       - JWT_SECRET=your_jwt_secret_key_here
     depends_on:
-      - postgres
-    volumes:
-      - .:/app
+      - mongodb
+      - redis
     restart: unless-stopped
 
-  postgres:
-    image: postgres:15-alpine
-    container_name: pehnaw-postgres
+  mongodb:
+    image: mongo:6.0
+    container_name: makwatches-mongodb
     ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=pehnaw
+      - "27017:27017"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongodb_data:/data/db
     restart: unless-stopped
 
-  # Uncomment if you want to use MongoDB instead
-  # mongodb:
-  #   image: mongo:6.0
-  #   container_name: pehnaw-mongodb
-  #   ports:
-  #     - "27017:27017"
-  #   environment:
-  #     - MONGO_INITDB_ROOT_USERNAME=root
-  #     - MONGO_INITDB_ROOT_PASSWORD=example
-  #     - MONGO_INITDB_DATABASE=pehnaw
-  #   volumes:
-  #     - mongodb_data:/data/db
-  #   restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    container_name: makwatches-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
-  # mongodb_data:  # Uncomment if using MongoDB
+  mongodb_data:
