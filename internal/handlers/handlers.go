@@ -6,9 +6,9 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
-	"github.com/the-devesta/pehnaw-be/internal/config"
-	"github.com/the-devesta/pehnaw-be/internal/database"
-	"github.com/the-devesta/pehnaw-be/internal/middleware"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/config"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/database"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/middleware"
 )
 
 // SetupRoutes configures all application routes

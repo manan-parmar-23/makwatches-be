@@ -10,9 +10,10 @@ This repository contains the backend API for the Pehnaw application.
 - JWT Authentication
 
 ## Project Structure
+
 ```
-├── cmd/               # Application entrypoints 
-│   └── api/           # API server 
+├── cmd/               # Application entrypoints
+│   └── api/           # API server
 ├── internal/          # Private application code
 │   ├── config/        # Configuration management
 │   ├── database/      # Database connections and operations
@@ -32,6 +33,7 @@ This repository contains the backend API for the Pehnaw application.
 ## API Endpoints
 
 ### Authentication
+
 - `POST /auth/register` - Register a new user (name, email, password)
 - `POST /auth/login` - Login with email and password
 - `GET /auth/google` - Initiate Google OAuth login
@@ -39,19 +41,23 @@ This repository contains the backend API for the Pehnaw application.
 - `GET /me` - Get current authenticated user's profile
 
 ### Products
+
 - `GET /products` - Get all products with optional category and price filters
 - `GET /products/:id` - Get a single product by ID
 
 ### Cart (Protected Routes)
+
 - `POST /cart` - Add product to cart (requires authentication)
 - `GET /cart/:userID` - Get a user's cart (requires authentication)
 - `DELETE /cart/:userID/:productID` - Remove item from cart (requires authentication)
 
 ### Orders (Protected Routes)
+
 - `POST /checkout` - Place order (requires authentication)
 - `GET /orders/:userID` - Get order history for a user (requires authentication)
 
 ### Recommendations (Protected Routes)
+
 - `GET /recommendations/:userID` - Get AI-based product recommendations (requires authentication)
 
 ## Getting Started
@@ -66,17 +72,20 @@ This repository contains the backend API for the Pehnaw application.
 ### Installation
 
 1. Clone the repository
+
    ```sh
-   git clone https://github.com/the-devesta/pehnaw-be.git
-   cd pehnaw-be
+   git clone https://github.com/shivam-mishra-20/mak-watches-be.git
+   cd mak-watches-be
    ```
 
 2. Install dependencies
+
    ```sh
    go mod download
    ```
 
 3. Install Air (hot reloading tool)
+
    ```sh
    go install github.com/air-verse/air@latest
    ```
@@ -88,10 +97,10 @@ This repository contains the backend API for the Pehnaw application.
    ```
    Edit the .env file with your configuration
 
-
 ## Development Commands
 
 ### Running the Application with Hot Reload (like nodemon)
+
 ```sh
 # Start the development server with Air (hot reloading)
 air
@@ -101,15 +110,17 @@ air
 ```
 
 ### Building and Running the Application
+
 ```sh
 # Build the application
-go build -o bin/pehnaw-be.exe ./cmd/api
+go build -o bin/makwatches-be.exe ./cmd/api
 
 # Run the built application
-./bin/pehnaw-be.exe
+./bin/makwatches-be.exe
 ```
 
 ### Testing
+
 ```sh
 # Run all tests
 go test ./... -v
@@ -119,6 +130,7 @@ go test ./internal/handlers -v
 ```
 
 ### Maintenance
+
 ```sh
 # Clean build artifacts
 Remove-Item -Path ./bin -Recurse -Force -ErrorAction SilentlyContinue
@@ -131,6 +143,7 @@ go vet ./...
 ## Setting up MongoDB and Redis
 
 ### Using Docker
+
 The easiest way to set up MongoDB and Redis is with Docker:
 
 ```sh
@@ -139,6 +152,7 @@ docker-compose up -d
 ```
 
 ### Manual Installation
+
 If you prefer manual installation:
 
 1. Install MongoDB: [MongoDB Installation Guide](https://www.mongodb.com/docs/manual/installation/)
@@ -151,6 +165,7 @@ If you prefer manual installation:
 If you encounter errors like "No connection could be made because the target machine actively refused it" or "Connection refused":
 
 1. Verify MongoDB is running:
+
    ```sh
    # Check if MongoDB is running (Windows)
    tasklist | findstr mongo
@@ -160,6 +175,7 @@ If you encounter errors like "No connection could be made because the target mac
    ```
 
 2. Check MongoDB connection string in `.env`:
+
    - Default is `mongodb://localhost:27017`
    - For Docker, it might be different depending on your Docker configuration
 
@@ -170,6 +186,7 @@ If you encounter errors like "No connection could be made because the target mac
 If your frontend application is having CORS issues:
 
 1. The API is configured to allow requests from:
+
    - `http://localhost:3000` (development frontend)
    - `https://pehnaw.com` (production frontend)
 

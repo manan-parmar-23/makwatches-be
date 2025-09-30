@@ -13,8 +13,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 
-	"github.com/the-devesta/pehnaw-be/internal/models"
-	"github.com/the-devesta/pehnaw-be/pkg/utils"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/models"
+	"github.com/shivam-mishra-20/mak-watches-be/pkg/utils"
 )
 
 // CreateProduct adds a new product to the database (admin only)

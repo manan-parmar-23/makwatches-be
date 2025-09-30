@@ -1,4 +1,4 @@
-module github.com/the-devesta/pehnaw-be
+module github.com/shivam-mishra-20/mak-watches-be
 
 go 1.23.0
 

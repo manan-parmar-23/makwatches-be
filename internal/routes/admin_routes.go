@@ -2,7 +2,7 @@ package routes
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/the-devesta/pehnaw-be/internal/handlers"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/handlers"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 

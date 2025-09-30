@@ -10,9 +10,9 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
-	"github.com/the-devesta/pehnaw-be/internal/config"
-	"github.com/the-devesta/pehnaw-be/internal/database"
-	"github.com/the-devesta/pehnaw-be/internal/handlers"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/config"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/database"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/handlers"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 	}
 
 	log.Printf("Starting server in %s environment...", cfg.Environment)
-	
+
 	// Initialize MongoDB client
 	mongoClient, _, err := config.InitMongoDB(cfg)
 	if err != nil {
@@ -83,11 +83,11 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
-	
+
 	// Give the server 5 seconds to finish ongoing requests
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	if err := app.ShutdownWithContext(ctx); err != nil {
 		log.Fatal("Server forced to shutdown: ", err)
 	}

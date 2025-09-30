@@ -14,9 +14,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
 
-	"github.com/the-devesta/pehnaw-be/internal/config"
-	"github.com/the-devesta/pehnaw-be/internal/database"
-	"github.com/the-devesta/pehnaw-be/internal/middleware"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/config"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/database"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/middleware"
 )
 
 // PaymentHandler provides endpoints for initiating payments (Razorpay order creation)

@@ -9,10 +9,10 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 
-	"github.com/the-devesta/pehnaw-be/internal/config"
-	"github.com/the-devesta/pehnaw-be/internal/database"
-	"github.com/the-devesta/pehnaw-be/internal/middleware"
-	"github.com/the-devesta/pehnaw-be/internal/models"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/config"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/database"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/middleware"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/models"
 )
 
 // UserProfileHandler handles user profile operations
@@ -32,7 +32,7 @@ func NewUserProfileHandler(db *database.DBClient, cfg *config.Config) *UserProfi
 // GetProfile returns the user's profile information
 func (h *UserProfileHandler) GetProfile(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -41,7 +41,7 @@ func (h *UserProfileHandler) GetProfile(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Get base user data
 	var userData models.User
 	userCollection := h.DB.Collections().Users
@@ -59,7 +59,7 @@ func (h *UserProfileHandler) GetProfile(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Get extended profile data
 	var profile models.UserProfile
 	profileCollection := h.DB.Collections().UserProfiles
@@ -71,7 +71,7 @@ func (h *UserProfileHandler) GetProfile(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Combine user and profile data
 	response := fiber.Map{
 		"id":        userData.ID,
@@ -80,7 +80,7 @@ func (h *UserProfileHandler) GetProfile(c *fiber.Ctx) error {
 		"role":      userData.Role,
 		"createdAt": userData.CreatedAt,
 	}
-	
+
 	// Add profile data if exists
 	if err != mongo.ErrNoDocuments {
 		response["dateOfBirth"] = profile.DateOfBirth
@@ -89,7 +89,7 @@ func (h *UserProfileHandler) GetProfile(c *fiber.Ctx) error {
 		response["avatarUrl"] = profile.AvatarURL
 		response["bio"] = profile.Bio
 	}
-	
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "User profile retrieved successfully",
@@ -100,7 +100,7 @@ func (h *UserProfileHandler) GetProfile(c *fiber.Ctx) error {
 // UpdateProfile updates the user's profile information
 func (h *UserProfileHandler) UpdateProfile(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -109,7 +109,7 @@ func (h *UserProfileHandler) UpdateProfile(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Parse request body
 	var req models.ProfileUpdateRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -119,14 +119,14 @@ func (h *UserProfileHandler) UpdateProfile(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Check if profile exists
 	profileCollection := h.DB.Collections().UserProfiles
 	var existingProfile models.UserProfile
 	err := profileCollection.FindOne(ctx, bson.M{"user_id": user.UserID}).Decode(&existingProfile)
-	
+
 	now := time.Now()
-	
+
 	if err == mongo.ErrNoDocuments {
 		// Create new profile
 		newProfile := models.UserProfile{
@@ -138,7 +138,7 @@ func (h *UserProfileHandler) UpdateProfile(c *fiber.Ctx) error {
 			Bio:         req.Bio,
 			UpdatedAt:   now,
 		}
-		
+
 		_, err = profileCollection.InsertOne(ctx, newProfile)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -156,7 +156,7 @@ func (h *UserProfileHandler) UpdateProfile(c *fiber.Ctx) error {
 	} else {
 		// Update existing profile
 		update := bson.M{"updated_at": now}
-		
+
 		if req.DateOfBirth != nil {
 			update["date_of_birth"] = req.DateOfBirth
 		}
@@ -172,7 +172,7 @@ func (h *UserProfileHandler) UpdateProfile(c *fiber.Ctx) error {
 		if req.Bio != "" {
 			update["bio"] = req.Bio
 		}
-		
+
 		_, err = profileCollection.UpdateOne(
 			ctx,
 			bson.M{"user_id": user.UserID},
@@ -186,7 +186,7 @@ func (h *UserProfileHandler) UpdateProfile(c *fiber.Ctx) error {
 			})
 		}
 	}
-	
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Profile updated successfully",
@@ -196,7 +196,7 @@ func (h *UserProfileHandler) UpdateProfile(c *fiber.Ctx) error {
 // UpdatePreferences updates the user's preferences
 func (h *UserProfileHandler) UpdatePreferences(c *fiber.Ctx) error {
 	ctx := c.Context()
-	
+
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
@@ -205,7 +205,7 @@ func (h *UserProfileHandler) UpdatePreferences(c *fiber.Ctx) error {
 			"message": "Unauthorized - User data not found",
 		})
 	}
-	
+
 	// Parse request body
 	var req models.PreferencesUpdateRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -215,28 +215,28 @@ func (h *UserProfileHandler) UpdatePreferences(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
-	
+
 	// Check if preferences exist
 	prefsCollection := h.DB.Collections().UserPreferences
 	var existingPrefs models.UserPreferences
 	err := prefsCollection.FindOne(ctx, bson.M{"user_id": user.UserID}).Decode(&existingPrefs)
-	
+
 	now := time.Now()
-	
+
 	if err == mongo.ErrNoDocuments {
 		// Create new preferences
 		newPrefs := models.UserPreferences{
-			ID:                primitive.NewObjectID(),
-			UserID:           user.UserID,
+			ID:                 primitive.NewObjectID(),
+			UserID:             user.UserID,
 			FavoriteCategories: req.FavoriteCategories,
-			FavoriteBrands:    req.FavoriteBrands,
-			SizePreferences:   req.SizePreferences,
-			ColorPreferences:  req.ColorPreferences,
-			PriceRange:        req.PriceRange,
-			CreatedAt:         now,
-			UpdatedAt:         now,
+			FavoriteBrands:     req.FavoriteBrands,
+			SizePreferences:    req.SizePreferences,
+			ColorPreferences:   req.ColorPreferences,
+			PriceRange:         req.PriceRange,
+			CreatedAt:          now,
+			UpdatedAt:          now,
 		}
-		
+
 		_, err = prefsCollection.InsertOne(ctx, newPrefs)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -254,7 +254,7 @@ func (h *UserProfileHandler) UpdatePreferences(c *fiber.Ctx) error {
 	} else {
 		// Update existing preferences
 		update := bson.M{"updated_at": now}
-		
+
 		if req.FavoriteCategories != nil {
 			update["favorite_categories"] = req.FavoriteCategories
 		}
@@ -270,7 +270,7 @@ func (h *UserProfileHandler) UpdatePreferences(c *fiber.Ctx) error {
 		if req.PriceRange != nil {
 			update["price_range"] = req.PriceRange
 		}
-		
+
 		_, err = prefsCollection.UpdateOne(
 			ctx,
 			bson.M{"user_id": user.UserID},
@@ -284,11 +284,11 @@ func (h *UserProfileHandler) UpdatePreferences(c *fiber.Ctx) error {
 			})
 		}
 	}
-	
+
 	// Invalidate recommendations cache
 	cacheKey := fmt.Sprintf("recommendations:%s", user.UserID.Hex())
 	h.DB.CacheDel(ctx, cacheKey)
-	
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Preferences updated successfully",

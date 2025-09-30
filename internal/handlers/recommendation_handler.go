@@ -10,10 +10,10 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"github.com/the-devesta/pehnaw-be/internal/config"
-	"github.com/the-devesta/pehnaw-be/internal/database"
-	"github.com/the-devesta/pehnaw-be/internal/middleware"
-	"github.com/the-devesta/pehnaw-be/internal/models"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/config"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/database"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/middleware"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/models"
 )
 
 // RecommendationHandler handles product recommendations
