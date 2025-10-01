@@ -26,14 +26,14 @@ type Config struct {
 	JWTExpirationHours int
 	RedisDatabase      int
 	// Razorpay settings
-	RazorpayKey          string
-	RazorpaySecret       string
+	RazorpayKey           string
+	RazorpaySecret        string
 	RazorpayWebhookSecret string
 	// AWS S3 settings
-	AWSS3AccessKey      string
-	AWSS3SecretKey      string
-	AWSS3Region         string
-	AWSS3BucketName     string
+	AWSS3AccessKey  string
+	AWSS3SecretKey  string
+	AWSS3Region     string
+	AWSS3BucketName string
 	// Google OAuth settings
 	GoogleClientID     string
 	GoogleClientSecret string
@@ -57,14 +57,14 @@ func LoadConfig() (*Config, error) {
 		JWTExpirationHours: getEnvAsInt("JWT_EXPIRATION_HOURS", 24),
 		RedisDatabase:      getEnvAsInt("REDIS_DATABASE", 0),
 		// Razorpay config
-		RazorpayKey:          getEnv("RAZORPAY_KEY", ""),
-		RazorpaySecret:       getEnv("RAZORPAY_SECRET", ""),
+		RazorpayKey:           getEnv("RAZORPAY_KEY", ""),
+		RazorpaySecret:        getEnv("RAZORPAY_SECRET", ""),
 		RazorpayWebhookSecret: getEnv("RAZORPAY_WEBHOOK_SECRET", ""),
 		// AWS S3 config
-		AWSS3AccessKey:      getEnv("AWS_S3_ACCESS_KEY", ""),
-		AWSS3SecretKey:      getEnv("AWS_S3_SECRET_KEY", ""),
-		AWSS3Region:         getEnv("AWS_S3_REGION", "ap-south-1"),
-		AWSS3BucketName:     getEnv("AWS_S3_BUCKET_NAME", "pehnaw"),
+		AWSS3AccessKey:  getEnv("AWS_S3_ACCESS_KEY", ""),
+		AWSS3SecretKey:  getEnv("AWS_S3_SECRET_KEY", ""),
+		AWSS3Region:     getEnv("AWS_S3_REGION", "ap-south-1"),
+		AWSS3BucketName: getEnv("AWS_S3_BUCKET_NAME", "pehnaw"),
 		// Google OAuth config
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
@@ -84,9 +84,9 @@ func InitMongoDB(config *Config) (*mongo.Client, *mongo.Database, error) {
 		ApplyURI(config.MongoURI).
 		SetConnectTimeout(5 * time.Second).
 		SetServerSelectionTimeout(5 * time.Second)
-	
+
 	log.Printf("Attempting to connect to MongoDB at %s...", config.MongoURI)
-	
+
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
 		log.Printf("MongoDB connection error: %v", err)
@@ -96,7 +96,7 @@ func InitMongoDB(config *Config) (*mongo.Client, *mongo.Database, error) {
 	// Ping the database to verify connection
 	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer pingCancel()
-	
+
 	if err := client.Ping(pingCtx, readpref.Primary()); err != nil {
 		log.Printf("MongoDB ping failed: %v", err)
 		log.Println("Ensure MongoDB is running and the connection URI is correct")
@@ -111,7 +111,7 @@ func InitMongoDB(config *Config) (*mongo.Client, *mongo.Database, error) {
 // InitRedis initializes the Redis client
 func InitRedis(config *Config) (*redis.Client, error) {
 	log.Printf("Attempting to connect to Redis at %s...", config.RedisURI)
-	
+
 	client := redis.NewClient(&redis.Options{
 		Addr:        config.RedisURI,
 		Password:    config.RedisPassword, // no password by default
@@ -128,13 +128,13 @@ func InitRedis(config *Config) (*redis.Client, error) {
 	if err != nil {
 		log.Printf("Redis connection error: %v", err)
 		log.Println("Ensure Redis is running and the connection details are correct")
-		
+
 		// If in development mode and Redis is optional, we could return a mock client or nil
 		if config.Environment == "development" {
 			log.Println("In development mode - continuing without Redis. Caching will be unavailable.")
 			return client, nil
 		}
-		
+
 		return nil, err
 	}
 
@@ -157,6 +157,14 @@ func getEnvAsInt(key string, fallback int) int {
 		if err == nil {
 			return result
 		}
+	}
+	return fallback
+}
+
+// GetEnvOrDefault returns the environment variable value or a fallback
+func (c *Config) GetEnvOrDefault(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
 	}
 	return fallback
 }

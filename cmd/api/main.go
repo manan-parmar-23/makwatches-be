@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/config"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/database"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/handlers"
@@ -64,7 +65,19 @@ func main() {
 		AppName:      "Pehnaw API",
 		ErrorHandler: customErrorHandler,
 		BodyLimit:    10 * 1024 * 1024, // 10MB
+
 	})
+
+	// Configure CORS: allow local dev and production Vercel origin (configurable via env)
+	vercelOrigin := cfg.GetEnvOrDefault("VERCEL_ORIGIN", "https://mak-watches.vercel.app")
+	devOrigin := cfg.GetEnvOrDefault("DEV_ORIGIN", "http://localhost:4200")
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     vercelOrigin + "," + devOrigin,
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Requested-With",
+		AllowCredentials: true,
+		ExposeHeaders:    "Content-Length, Access-Control-Allow-Origin, Access-Control-Allow-Headers",
+	}))
 
 	// Setup all routes and middleware
 	handlers.SetupRoutes(app, dbClient, cfg)
