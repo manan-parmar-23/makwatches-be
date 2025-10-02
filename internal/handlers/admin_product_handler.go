@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -13,8 +14,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 
+	"github.com/shivam-mishra-20/mak-watches-be/internal/firebase"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/models"
-	"github.com/shivam-mishra-20/mak-watches-be/pkg/utils"
 )
 
 // CreateProduct adds a new product to the database (admin only)
@@ -49,19 +50,19 @@ func (h *ProductHandler) CreateProduct(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get S3 client
-	s3Client, err := utils.NewS3Client(
-		h.Config.AWSS3AccessKey,
-		h.Config.AWSS3SecretKey,
-		h.Config.AWSS3Region,
-		h.Config.AWSS3BucketName,
-	)
+	// Get Firebase client (with development fallback)
+	fbClient, err := firebase.NewFirebaseClient(ctx, h.Config.FirebaseCredentialsPath, h.Config.FirebaseBucketName)
+	useLocalFallback := false
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "Failed to initialize S3 client",
-			"error":   err.Error(),
-		})
+		if h.Config.Environment == "development" || h.Config.Environment == "dev" || h.Config.Environment == "local" {
+			useLocalFallback = true
+		} else {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"success": false,
+				"message": "Failed to initialize Firebase client",
+				"error":   err.Error(),
+			})
+		}
 	}
 
 	// Upload images (if any)
@@ -72,23 +73,55 @@ func (h *ProductHandler) CreateProduct(c *fiber.Ctx) error {
 			product.Images = []string{} // Initialize the Images array
 
 			// Upload each image
-			for _, file := range files {
-				// Upload to S3
-				imageURL, err := s3Client.UploadFile(ctx, file, "products")
-				if err != nil {
-					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-						"success": false,
-						"message": "Failed to upload image",
-						"error":   err.Error(),
-					})
-				}
-
-				// Add URL to the product
-				product.Images = append(product.Images, imageURL)
-
-				// If no main image is set yet, use this one
-				if product.ImageURL == "" {
-					product.ImageURL = imageURL
+			for _, fh := range files {
+				if useLocalFallback {
+					// Ensure uploads directory exists
+					if err := os.MkdirAll("uploads", 0o755); err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to prepare uploads directory",
+							"error":   err.Error(),
+						})
+					}
+					unique := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fh.Filename)
+					destPath := filepath.Join("uploads", unique)
+					if err := c.SaveFile(fh, destPath); err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to save image",
+							"error":   err.Error(),
+						})
+					}
+					imageURL := c.BaseURL() + "/uploads/" + unique
+					product.Images = append(product.Images, imageURL)
+					if product.ImageURL == "" {
+						product.ImageURL = imageURL
+					}
+				} else {
+					// Open the uploaded file
+					fileReader, err := fh.Open()
+					if err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to open uploaded file",
+							"error":   err.Error(),
+						})
+					}
+					// Upload to Firebase
+					imageURL, err := fbClient.UploadFile(ctx, fileReader, fh.Filename)
+					fileReader.Close()
+					if err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to upload image to Firebase Storage",
+							"error":   err.Error(),
+						})
+					}
+					// Add URL to the product
+					product.Images = append(product.Images, imageURL)
+					if product.ImageURL == "" {
+						product.ImageURL = imageURL
+					}
 				}
 			}
 		}
@@ -241,19 +274,19 @@ func (h *ProductHandler) UpdateProduct(c *fiber.Ctx) error {
 		updatedProduct.ImageURL = ""
 	}
 
-	// Get S3 client for image uploads
-	s3Client, err := utils.NewS3Client(
-		h.Config.AWSS3AccessKey,
-		h.Config.AWSS3SecretKey,
-		h.Config.AWSS3Region,
-		h.Config.AWSS3BucketName,
-	)
+	// Get Firebase client for image uploads (with development fallback)
+	fbClient, err := firebase.NewFirebaseClient(ctx, h.Config.FirebaseCredentialsPath, h.Config.FirebaseBucketName)
+	useLocalFallback := false
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "Failed to initialize S3 client",
-			"error":   err.Error(),
-		})
+		if h.Config.Environment == "development" || h.Config.Environment == "dev" || h.Config.Environment == "local" {
+			useLocalFallback = true
+		} else {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"success": false,
+				"message": "Failed to initialize Firebase client",
+				"error":   err.Error(),
+			})
+		}
 	}
 
 	// Upload new images (if any)
@@ -262,30 +295,59 @@ func (h *ProductHandler) UpdateProduct(c *fiber.Ctx) error {
 		files := form.File["images"]
 		if len(files) > 0 {
 			// Upload each image
-			for _, file := range files {
-				// Upload to S3
-				imageURL, err := s3Client.UploadFile(ctx, file, "products")
-				if err != nil {
-					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-						"success": false,
-						"message": "Failed to upload image",
-						"error":   err.Error(),
-					})
-				}
-
-				// Add URL to the product
-				updatedProduct.Images = append(updatedProduct.Images, imageURL)
-
-				// If no main image is set yet, use this one
-				if updatedProduct.ImageURL == "" {
-					updatedProduct.ImageURL = imageURL
+			for _, fh := range files {
+				if useLocalFallback {
+					if err := os.MkdirAll("uploads", 0o755); err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to prepare uploads directory",
+							"error":   err.Error(),
+						})
+					}
+					unique := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fh.Filename)
+					destPath := filepath.Join("uploads", unique)
+					if err := c.SaveFile(fh, destPath); err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to save image",
+							"error":   err.Error(),
+						})
+					}
+					imageURL := c.BaseURL() + "/uploads/" + unique
+					updatedProduct.Images = append(updatedProduct.Images, imageURL)
+					if updatedProduct.ImageURL == "" {
+						updatedProduct.ImageURL = imageURL
+					}
+				} else {
+					// Open the uploaded file
+					fileReader, err := fh.Open()
+					if err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to open uploaded file",
+							"error":   err.Error(),
+						})
+					}
+					imageURL, err := fbClient.UploadFile(ctx, fileReader, fh.Filename)
+					fileReader.Close()
+					if err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to upload image to Firebase Storage",
+							"error":   err.Error(),
+						})
+					}
+					updatedProduct.Images = append(updatedProduct.Images, imageURL)
+					if updatedProduct.ImageURL == "" {
+						updatedProduct.ImageURL = imageURL
+					}
 				}
 			}
 		}
 	}
 
-	// Ensure at least one image
-	if len(updatedProduct.Images) == 0 {
+	// Ensure at least one image if neither images nor imageUrl were provided
+	if len(updatedProduct.Images) == 0 && updatedProduct.ImageURL == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"message": "Product must have at least one image",
@@ -410,21 +472,8 @@ func (h *ProductHandler) DeleteProduct(c *fiber.Ctx) error {
 
 	// ALWAYS delete images if product existed and had images
 	if findErr == nil && len(product.Images) > 0 {
-		// Delete both from S3 (if configured) AND local filesystem
-
-		// 1. Try S3 first if configured
-		s3Client, err := utils.NewS3Client(
-			h.Config.AWSS3AccessKey,
-			h.Config.AWSS3SecretKey,
-			h.Config.AWSS3Region,
-			h.Config.AWSS3BucketName,
-		)
-		if err == nil {
-			// If S3 client available, try deleting from S3
-			for _, imageURL := range product.Images {
-				_ = s3Client.DeleteFile(ctx, imageURL)
-			}
-		}
+		// Note: Firebase Storage files are automatically managed and don't need manual deletion
+		// The files will remain in Firebase Storage but are no longer referenced in the database
 
 		// 2. Also remove local files if they exist in uploads directory
 		// This handles both local-only and S3+local scenarios

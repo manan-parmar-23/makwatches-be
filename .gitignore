@@ -19,7 +19,8 @@
 *.env
 !example.env
 googleCreds.json
-
+firebase-credentials.json
+firebase-admin.json
 # Testing
 /coverage/
 *.coverprofile

@@ -38,6 +38,9 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
+	// Firebase settings
+	FirebaseCredentialsPath string
+	FirebaseBucketName      string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -69,6 +72,9 @@ func LoadConfig() (*Config, error) {
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/google/callback"),
+		// Firebase config
+		FirebaseCredentialsPath: getEnv("FIREBASE_CREDENTIALS_PATH", "firebase-admin.json"),
+		FirebaseBucketName:      getEnv("FIREBASE_BUCKET_NAME", ""),
 	}
 
 	return cfg, nil
