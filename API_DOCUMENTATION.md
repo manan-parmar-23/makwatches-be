@@ -3,6 +3,7 @@
 This document provides comprehensive documentation for the Pehnaw e-commerce API. It covers all available endpoints, request/response formats, authentication requirements, and examples.
 
 ## Table of Contents
+
 - [Base URL](#base-url)
 - [Authentication](#authentication)
 - [Response Format](#response-format)
@@ -47,7 +48,7 @@ All API responses follow a consistent structure:
 {
   "success": true,
   "message": "Operation successful",
-  "data": { 
+  "data": {
     // Response data specific to the endpoint
   }
 }
@@ -68,11 +69,13 @@ All API responses follow a consistent structure:
 ### Health and Welcome
 
 #### GET /health
+
 Check if the API is running properly.
 
 **Authentication:** Not required
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -81,11 +84,13 @@ Check if the API is running properly.
 ```
 
 #### GET /welcome
+
 Get a welcome message from the API.
 
 **Authentication:** Not required
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -96,11 +101,13 @@ Get a welcome message from the API.
 ### Authentication Endpoints
 
 #### POST /auth/register
+
 Register a new user.
 
 **Authentication:** Not required
 
 **Request Body:**
+
 ```json
 {
   "name": "John Doe",
@@ -110,6 +117,7 @@ Register a new user.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -127,11 +135,13 @@ Register a new user.
 ```
 
 #### POST /auth/login
+
 Login to the system.
 
 **Authentication:** Not required
 
 **Request Body:**
+
 ```json
 {
   "email": "john@example.com",
@@ -140,6 +150,7 @@ Login to the system.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -150,7 +161,7 @@ Login to the system.
       "name": "John Doe",
       "email": "john@example.com",
       "role": "user",
-      "picture": "https://example.com/profile.jpg", 
+      "picture": "https://example.com/profile.jpg",
       "authProvider": "local"
     },
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -159,6 +170,7 @@ Login to the system.
 ```
 
 #### GET /auth/google
+
 Initiates the Google OAuth login flow.
 
 **Authentication:** Not required
@@ -166,22 +178,26 @@ Initiates the Google OAuth login flow.
 **Response:** Redirects to Google's authentication page
 
 #### GET /auth/google/callback
+
 Handles the callback from Google's OAuth service.
 
 **Authentication:** Not required
 
 **Query Parameters:**
+
 - `code` (string, required): Authorization code from Google
 - `state` (string, required): State parameter for CSRF protection
 
 **Response:** Redirects to the frontend with a token
 
 #### GET /me
+
 Get the current authenticated user's profile information.
 
 **Authentication:** Required
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -200,11 +216,13 @@ Get the current authenticated user's profile information.
 ### Products
 
 #### GET /products
+
 Get a list of products with optional filtering.
 
 **Authentication:** Not required
 
 **Query Parameters:**
+
 - `category` (string, optional): Filter products by category
 - `minPrice` (number, optional): Minimum price filter
 - `maxPrice` (number, optional): Maximum price filter
@@ -214,6 +232,7 @@ Get a list of products with optional filtering.
 - `limit` (number, optional): Results per page (default: 10)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -229,7 +248,7 @@ Get a list of products with optional filtering.
       "stock": 100,
       "createdAt": "2023-07-28T10:00:00Z",
       "updatedAt": "2023-07-28T10:00:00Z"
-    },
+    }
     // More products...
   ],
   "meta": {
@@ -242,27 +261,46 @@ Get a list of products with optional filtering.
 ```
 
 #### GET /products/:id
+
 Get details of a specific product.
 
 **Authentication:** Not required
 
 **URL Parameters:**
+
 - `id` (string, required): Product ID
 
 #### POST /products
+
 Create a new product (admin only).
 
 **Authentication:** Required (admin role)
 
 **Request:** Multipart Form Data
+
 - `name` (string, required): Product name
 - `description` (string, required): Product description
 - `price` (number, required): Product price
 - `category` (string, required): Product category
 - `stock` (number, required): Available stock
-- `images` (files, optional): Multiple image files to upload
+- `images` (files, optional): One or more image files to upload. The server accepts multiple files under the `images` field. For single-file clients, `image` (singular) is also accepted for compatibility.
+
+Example (curl):
+
+```bash
+curl -X POST "http://localhost:8080/products" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -F "name=Example Product" \
+  -F "description=An example" \
+  -F "price=19.99" \
+  -F "category=example" \
+  -F "stock=10" \
+  -F "images=@/path/to/front.jpg" \
+  -F "images=@/path/to/back.jpg"
+```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -286,23 +324,38 @@ Create a new product (admin only).
 ```
 
 #### PUT /products/:id
+
 Update an existing product (admin only).
 
 **Authentication:** Required (admin role)
 
 **URL Parameters:**
+
 - `id` (string, required): Product ID
 
 **Request:** Multipart Form Data
+
 - `name` (string, optional): Product name
 - `description` (string, optional): Product description
 - `price` (number, optional): Product price
 - `category` (string, optional): Product category
 - `stock` (number, optional): Available stock
 - `keepExistingImages` (boolean, optional): Whether to keep existing images (default: true)
-- `images` (files, optional): New image files to upload
+- `images` (files, optional): One or more new image files to upload. Multiple files may be provided under the `images` key. The singular `image` key is also accepted for compatibility.
+
+Example (curl):
+
+```bash
+curl -X PUT "http://localhost:8080/products/<PRODUCT_ID>" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -F "name=Updated Product Name" \
+  -F "keepExistingImages=false" \
+  -F "images=@/path/to/new1.jpg" \
+  -F "images=@/path/to/new2.jpg"
+```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -327,17 +380,21 @@ Update an existing product (admin only).
 ```
 
 #### DELETE /products/:id
+
 Delete a product (admin only).
 
 **Authentication:** Required (admin role)
 
 **URL Parameters:**
+
 - `id` (string, required): Product ID
 
 **Query Parameters:**
+
 - `deleteImages` (boolean, optional): Whether to delete images from S3 (default: false)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -346,6 +403,7 @@ Delete a product (admin only).
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -367,11 +425,13 @@ Delete a product (admin only).
 ### Cart
 
 #### POST /cart
+
 Add a product to the cart.
 
 **Authentication:** Required
 
 **Request Body:**
+
 ```json
 {
   "productId": "60d21b4667d0d8992e610c85",
@@ -380,6 +440,7 @@ Add a product to the cart.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -388,14 +449,17 @@ Add a product to the cart.
 ```
 
 #### GET /cart/:userID
+
 Get the current user's cart contents.
 
 **Authentication:** Required
 
 **URL Parameters:**
+
 - `userID` (string, required): User ID (must match authenticated user or be an admin)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -429,15 +493,18 @@ Get the current user's cart contents.
 ```
 
 #### DELETE /cart/:userID/:productID
+
 Remove an item from the cart.
 
 **Authentication:** Required
 
 **URL Parameters:**
+
 - `userID` (string, required): User ID (must match authenticated user or be an admin)
 - `productID` (string, required): Product ID to remove
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -448,11 +515,13 @@ Remove an item from the cart.
 ### Orders
 
 #### POST /checkout
+
 Create a new order from cart items.
 
 **Authentication:** Required
 
 **Request Body:**
+
 ```json
 {
   "shippingAddress": {
@@ -472,6 +541,7 @@ Create a new order from cart items.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -510,14 +580,17 @@ Create a new order from cart items.
 ```
 
 #### GET /orders/:userID
+
 Get order history for a user.
 
 **Authentication:** Required
 
 **URL Parameters:**
+
 - `userID` (string, required): User ID (must match authenticated user or be an admin)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -560,14 +633,17 @@ Get order history for a user.
 ### Recommendations
 
 #### GET /recommendations/:userID
+
 Get personalized product recommendations for a user.
 
 **Authentication:** Required
 
 **URL Parameters:**
+
 - `userID` (string, required): User ID (must match authenticated user or be an admin)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -592,6 +668,7 @@ Get personalized product recommendations for a user.
 ## Data Models
 
 ### User
+
 ```
 {
   "id": "ObjectID",
@@ -608,6 +685,7 @@ Get personalized product recommendations for a user.
 ```
 
 ### Product
+
 ```
 {
   "id": "ObjectID",
@@ -623,6 +701,7 @@ Get personalized product recommendations for a user.
 ```
 
 ### Cart Item
+
 ```
 {
   "id": "ObjectID",
@@ -636,6 +715,7 @@ Get personalized product recommendations for a user.
 ```
 
 ### Order
+
 ```
 {
   "id": "ObjectID",
@@ -703,16 +783,19 @@ Response includes pagination metadata:
 ## Filtering and Sorting
 
 Product listing supports filtering by:
+
 - Category
 - Price range (min and max)
 
 And sorting by:
+
 - Any product field
 - Ascending or descending order
 
 ## Caching
 
 The API implements Redis caching for improved performance on:
+
 - Product listings
 - Individual product details
 - Cart contents

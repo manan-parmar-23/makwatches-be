@@ -22,14 +22,102 @@ import (
 func (h *ProductHandler) CreateProduct(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	// Parse product data
+	// Prepare product and helper container for uploaded images
 	var product models.Product
+	uploadedImages := []string{}
+
+	// Initialize Firebase client early so we can upload files if present.
+	fbClient, err := firebase.NewFirebaseClient(ctx, h.Config.FirebaseCredentialsPath, h.Config.FirebaseBucketName)
+	useLocalFallback := false
+	if err != nil {
+		if h.Config.Environment == "development" || h.Config.Environment == "dev" || h.Config.Environment == "local" {
+			useLocalFallback = true
+		} else {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"success": false,
+				"message": "Failed to initialize Firebase client",
+				"error":   err.Error(),
+			})
+		}
+	}
+
+	// If this is a multipart form, try to read files first so we don't lose the stream when parsing body
+	if form, ferr := c.MultipartForm(); ferr == nil {
+		// Accept both "images" (multiple) and "image" (single) form keys
+		files := form.File["images"]
+		if len(files) == 0 {
+			files = form.File["image"]
+		}
+		if len(files) > 0 {
+			for _, fh := range files {
+				if useLocalFallback {
+					if err := os.MkdirAll("uploads", 0o755); err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to prepare uploads directory",
+							"error":   err.Error(),
+						})
+					}
+					unique := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fh.Filename)
+					destPath := filepath.Join("uploads", unique)
+					if err := c.SaveFile(fh, destPath); err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to save image",
+							"error":   err.Error(),
+						})
+					}
+					imageURL := c.BaseURL() + "/uploads/" + unique
+					uploadedImages = append(uploadedImages, imageURL)
+				} else {
+					fileReader, err := fh.Open()
+					if err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to open uploaded file",
+							"error":   err.Error(),
+						})
+					}
+					imageURL, err := fbClient.UploadFile(ctx, fileReader, fh.Filename)
+					fileReader.Close()
+					if err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to upload image to Firebase Storage",
+							"error":   err.Error(),
+						})
+					}
+					uploadedImages = append(uploadedImages, imageURL)
+				}
+			}
+		}
+	}
+
+	// Parse product data (fields). BodyParser works for both JSON and form fields.
 	if err := c.BodyParser(&product); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"message": "Invalid product data",
 			"error":   err.Error(),
 		})
+	}
+
+	// Handle images from multiple sources:
+	// Priority 1: If images array was provided in JSON body, use those (pre-uploaded URLs)
+	// Priority 2: If files were uploaded in multipart form, merge them with any from JSON
+
+	// If files were uploaded via multipart, merge them with any images from JSON body
+	if len(uploadedImages) > 0 {
+		if product.Images == nil {
+			product.Images = []string{}
+		}
+		// Merge uploaded files with any images from JSON body
+		product.Images = append(product.Images, uploadedImages...)
+	}
+
+	// Set ImageURL if not provided
+	if product.ImageURL == "" && len(product.Images) > 0 {
+		product.ImageURL = product.Images[0]
 	}
 
 	// Derive/normalize category pieces (backward compatibility)
@@ -50,82 +138,7 @@ func (h *ProductHandler) CreateProduct(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get Firebase client (with development fallback)
-	fbClient, err := firebase.NewFirebaseClient(ctx, h.Config.FirebaseCredentialsPath, h.Config.FirebaseBucketName)
-	useLocalFallback := false
-	if err != nil {
-		if h.Config.Environment == "development" || h.Config.Environment == "dev" || h.Config.Environment == "local" {
-			useLocalFallback = true
-		} else {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"success": false,
-				"message": "Failed to initialize Firebase client",
-				"error":   err.Error(),
-			})
-		}
-	}
-
-	// Upload images (if any)
-	form, err := c.MultipartForm()
-	if err == nil {
-		files := form.File["images"]
-		if len(files) > 0 {
-			product.Images = []string{} // Initialize the Images array
-
-			// Upload each image
-			for _, fh := range files {
-				if useLocalFallback {
-					// Ensure uploads directory exists
-					if err := os.MkdirAll("uploads", 0o755); err != nil {
-						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-							"success": false,
-							"message": "Failed to prepare uploads directory",
-							"error":   err.Error(),
-						})
-					}
-					unique := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fh.Filename)
-					destPath := filepath.Join("uploads", unique)
-					if err := c.SaveFile(fh, destPath); err != nil {
-						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-							"success": false,
-							"message": "Failed to save image",
-							"error":   err.Error(),
-						})
-					}
-					imageURL := c.BaseURL() + "/uploads/" + unique
-					product.Images = append(product.Images, imageURL)
-					if product.ImageURL == "" {
-						product.ImageURL = imageURL
-					}
-				} else {
-					// Open the uploaded file
-					fileReader, err := fh.Open()
-					if err != nil {
-						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-							"success": false,
-							"message": "Failed to open uploaded file",
-							"error":   err.Error(),
-						})
-					}
-					// Upload to Firebase
-					imageURL, err := fbClient.UploadFile(ctx, fileReader, fh.Filename)
-					fileReader.Close()
-					if err != nil {
-						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-							"success": false,
-							"message": "Failed to upload image to Firebase Storage",
-							"error":   err.Error(),
-						})
-					}
-					// Add URL to the product
-					product.Images = append(product.Images, imageURL)
-					if product.ImageURL == "" {
-						product.ImageURL = imageURL
-					}
-				}
-			}
-		}
-	}
+	// (image uploads already handled above)
 
 	// Derive MainCategory/Subcategory from Category if not individually provided
 	if product.MainCategory == "" && product.Category != "" {
@@ -213,8 +226,77 @@ func (h *ProductHandler) UpdateProduct(c *fiber.Ctx) error {
 
 	// Fiber handles multipart form parsing automatically
 
-	// Parse product data
+	// Prepare updatedProduct and capture uploaded images first
 	var updatedProduct models.Product
+	uploadedImages := []string{}
+
+	// Initialize Firebase client for uploads (with development fallback)
+	fbClient, err := firebase.NewFirebaseClient(ctx, h.Config.FirebaseCredentialsPath, h.Config.FirebaseBucketName)
+	useLocalFallback := false
+	if err != nil {
+		if h.Config.Environment == "development" || h.Config.Environment == "dev" || h.Config.Environment == "local" {
+			useLocalFallback = true
+		} else {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"success": false,
+				"message": "Failed to initialize Firebase client",
+				"error":   err.Error(),
+			})
+		}
+	}
+
+	// Parse multipart uploads first so body parsing can still work
+	if form, ferr := c.MultipartForm(); ferr == nil {
+		files := form.File["images"]
+		if len(files) == 0 {
+			files = form.File["image"]
+		}
+		if len(files) > 0 {
+			for _, fh := range files {
+				if useLocalFallback {
+					if err := os.MkdirAll("uploads", 0o755); err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to prepare uploads directory",
+							"error":   err.Error(),
+						})
+					}
+					unique := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fh.Filename)
+					destPath := filepath.Join("uploads", unique)
+					if err := c.SaveFile(fh, destPath); err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to save image",
+							"error":   err.Error(),
+						})
+					}
+					imageURL := c.BaseURL() + "/uploads/" + unique
+					uploadedImages = append(uploadedImages, imageURL)
+				} else {
+					fileReader, err := fh.Open()
+					if err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to open uploaded file",
+							"error":   err.Error(),
+						})
+					}
+					imageURL, err := fbClient.UploadFile(ctx, fileReader, fh.Filename)
+					fileReader.Close()
+					if err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+							"success": false,
+							"message": "Failed to upload image to Firebase Storage",
+							"error":   err.Error(),
+						})
+					}
+					uploadedImages = append(uploadedImages, imageURL)
+				}
+			}
+		}
+	}
+
+	// Parse product data from body (works with form fields or JSON)
 	if err := c.BodyParser(&updatedProduct); err != nil {
 		fmt.Printf("[UpdateProduct] Error parsing body: %v\n", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -223,6 +305,10 @@ func (h *ProductHandler) UpdateProduct(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
+
+	// Capture images from JSON body (if provided) before we potentially overwrite them
+	imagesFromBody := updatedProduct.Images
+	imageUrlFromBody := updatedProduct.ImageURL
 
 	// Keep existing fields if not provided
 	if updatedProduct.Name == "" {
@@ -259,92 +345,46 @@ func (h *ProductHandler) UpdateProduct(c *fiber.Ctx) error {
 		}
 	}
 
-	// Handle keepExistingImages flag
-	keepExistingImages := true
-	if keepImagesStr := c.FormValue("keepExistingImages"); keepImagesStr != "" {
-		keepExistingImages, _ = strconv.ParseBool(keepImagesStr)
-	}
+	// Handle image updates with multiple strategies:
+	// Priority 1: If images were provided in JSON body, use those
+	// Priority 2: If files were uploaded in multipart form, use those
+	// Priority 3: Check keepExistingImages flag to determine whether to keep existing images
 
-	// Initialize with existing images if keeping them
-	if keepExistingImages {
+	// Check if images were provided in the JSON body
+	if len(imagesFromBody) > 0 {
+		// Images provided in JSON body (e.g., pre-uploaded URLs)
+		updatedProduct.Images = imagesFromBody
+		if imageUrlFromBody != "" {
+			updatedProduct.ImageURL = imageUrlFromBody
+		} else if len(imagesFromBody) > 0 {
+			updatedProduct.ImageURL = imagesFromBody[0]
+		}
+	} else if len(uploadedImages) > 0 {
+		// Files were uploaded in this request
+		// Handle keepExistingImages flag for multipart uploads
+		keepExistingImages := true
+		if keepImagesStr := c.FormValue("keepExistingImages"); keepImagesStr != "" {
+			keepExistingImages, _ = strconv.ParseBool(keepImagesStr)
+		}
+
+		if keepExistingImages {
+			// Merge with existing images
+			updatedProduct.Images = append(existingProduct.Images, uploadedImages...)
+			if updatedProduct.ImageURL == "" {
+				updatedProduct.ImageURL = existingProduct.ImageURL
+			}
+		} else {
+			// Replace with new images
+			updatedProduct.Images = uploadedImages
+			updatedProduct.ImageURL = uploadedImages[0]
+		}
+	} else {
+		// No new images provided, keep existing
 		updatedProduct.Images = existingProduct.Images
 		updatedProduct.ImageURL = existingProduct.ImageURL
-	} else {
-		updatedProduct.Images = []string{}
-		updatedProduct.ImageURL = ""
 	}
 
-	// Get Firebase client for image uploads (with development fallback)
-	fbClient, err := firebase.NewFirebaseClient(ctx, h.Config.FirebaseCredentialsPath, h.Config.FirebaseBucketName)
-	useLocalFallback := false
-	if err != nil {
-		if h.Config.Environment == "development" || h.Config.Environment == "dev" || h.Config.Environment == "local" {
-			useLocalFallback = true
-		} else {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"success": false,
-				"message": "Failed to initialize Firebase client",
-				"error":   err.Error(),
-			})
-		}
-	}
-
-	// Upload new images (if any)
-	form, err := c.MultipartForm()
-	if err == nil {
-		files := form.File["images"]
-		if len(files) > 0 {
-			// Upload each image
-			for _, fh := range files {
-				if useLocalFallback {
-					if err := os.MkdirAll("uploads", 0o755); err != nil {
-						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-							"success": false,
-							"message": "Failed to prepare uploads directory",
-							"error":   err.Error(),
-						})
-					}
-					unique := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fh.Filename)
-					destPath := filepath.Join("uploads", unique)
-					if err := c.SaveFile(fh, destPath); err != nil {
-						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-							"success": false,
-							"message": "Failed to save image",
-							"error":   err.Error(),
-						})
-					}
-					imageURL := c.BaseURL() + "/uploads/" + unique
-					updatedProduct.Images = append(updatedProduct.Images, imageURL)
-					if updatedProduct.ImageURL == "" {
-						updatedProduct.ImageURL = imageURL
-					}
-				} else {
-					// Open the uploaded file
-					fileReader, err := fh.Open()
-					if err != nil {
-						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-							"success": false,
-							"message": "Failed to open uploaded file",
-							"error":   err.Error(),
-						})
-					}
-					imageURL, err := fbClient.UploadFile(ctx, fileReader, fh.Filename)
-					fileReader.Close()
-					if err != nil {
-						return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-							"success": false,
-							"message": "Failed to upload image to Firebase Storage",
-							"error":   err.Error(),
-						})
-					}
-					updatedProduct.Images = append(updatedProduct.Images, imageURL)
-					if updatedProduct.ImageURL == "" {
-						updatedProduct.ImageURL = imageURL
-					}
-				}
-			}
-		}
-	}
+	// Note: uploads were already processed earlier into uploadedImages and merged above.
 
 	// Ensure at least one image if neither images nor imageUrl were provided
 	if len(updatedProduct.Images) == 0 && updatedProduct.ImageURL == "" {
