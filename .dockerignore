@@ -28,7 +28,6 @@
 /bin/
 /tmp/
 /dist/
-/pkg/
 
 # Test files
 **/*_test.go
