@@ -12,15 +12,27 @@
 /vendor/
 
 # Local environment and configuration
+.env
 .env.local
+.env.development
 .env.development.local
+.env.test
 .env.test.local
+.env.production
 .env.production.local
 *.env
 !example.env
+
+# Credentials and secrets
 googleCreds.json
 firebase-credentials.json
 firebase-admin.json
+*.pem
+*.key
+*.crt
+id_rsa*
+*.ppk
+
 # Testing
 /coverage/
 *.coverprofile
@@ -51,3 +63,20 @@ logs/
 # Temporary files
 tmp/
 temp/
+*.tmp
+
+# Uploads (keep structure, ignore files)
+uploads/*
+!uploads/.gitkeep
+
+# Docker volumes
+docker-volumes/
+
+# Backup files
+*.backup
+*.bak
+backup/
+
+# Build artifacts
+dist/
+build/
