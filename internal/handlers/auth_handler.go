@@ -285,7 +285,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 		// Redirect to frontend callback with error so UI can show a message
 		frontendURL := "http://localhost:3000"
 		if h.Config != nil && h.Config.Environment == "production" {
-			frontendURL = "https://pehnaw.com"
+			frontendURL = "https://makwatches.in"
 		}
 		redirectErr := url.QueryEscape("missing_code")
 		return c.Redirect(fmt.Sprintf("%s/auth/callback?error=%s", frontendURL, redirectErr))
@@ -309,7 +309,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 		fmt.Printf("Google token exchange failed: %v\n", err)
 		frontendURL := "http://localhost:3000"
 		if h.Config != nil && h.Config.Environment == "production" {
-			frontendURL = "https://pehnaw.com"
+			frontendURL = "https://makwatches.in"
 		}
 		// Include a short encoded error message so frontend can show it
 		redirectErr := url.QueryEscape("token_exchange_failed")
@@ -322,7 +322,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 		fmt.Printf("Google GetUserInfo failed: %v\n", err)
 		frontendURL := "http://localhost:3000"
 		if h.Config != nil && h.Config.Environment == "production" {
-			frontendURL = "https://pehnaw.com"
+			frontendURL = "https://makwatches.in"
 		}
 		redirectErr := url.QueryEscape("userinfo_failed")
 		return c.Redirect(fmt.Sprintf("%s/auth/callback?error=%s", frontendURL, redirectErr))
@@ -487,7 +487,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 	// Prepare frontend redirect URL with token
 	frontendURL := "http://localhost:3000" // Default for development
 	if h.Config.Environment == "production" {
-		frontendURL = "https://pehnaw.com" // Production URL
+		frontendURL = "https://makwatches.in" // Production URL
 	}
 
 	// Redirect to frontend with token as query param

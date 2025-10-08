@@ -17,7 +17,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	app.Use(logger.New())
 	app.Use(recover.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000,https://pehnaw.com",
+		AllowOrigins:     "http://localhost:3000,https://makwatches.in",
 		AllowMethods:     "GET,POST,PUT,DELETE,PATCH",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowCredentials: true,
@@ -151,6 +151,12 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	adminHome.Put("/tech-highlight", homeContentHandler.UpsertTechHighlight)
 	adminHome.Delete("/tech-highlight", homeContentHandler.DeleteTechHighlight)
 
+	// Gallery images management
+	adminHome.Get("/gallery", homeContentHandler.ListGalleryImages)
+	adminHome.Post("/gallery", homeContentHandler.CreateGalleryImage)
+	adminHome.Put("/gallery/:id", homeContentHandler.UpdateGalleryImage)
+	adminHome.Delete("/gallery/:id", homeContentHandler.DeleteGalleryImage)
+
 	// Category management routes (/admin/categories)
 	adminCategories := admin.Group("/categories")
 	adminCategories.Get("/", categoryHandler.GetCategories)
@@ -223,6 +229,6 @@ func HealthHandler(c *fiber.Ctx) error {
 func WelcomeHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"success": true,
-		"message": "Welcome to Pehnaw API",
+		"message": "Welcome to Makwatches API",
 	})
 }

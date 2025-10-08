@@ -22,6 +22,7 @@ const (
 	collectionFeaturesCollectionName = "home_collection_features"
 	techCardsCollectionName          = "home_tech_cards"
 	techHighlightCollectionName      = "home_tech_highlights"
+	galleryCollectionName            = "home_gallery_images"
 	homeContentCacheKey              = "home_content"
 )
 
@@ -39,7 +40,7 @@ func NewHomeContentHandler(db *database.DBClient) *HomeContentHandler {
 func (h *HomeContentHandler) GetHomeContent(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	var cached models.HomeContent
+	var cached models.HomeContentWithGallery
 	if err := h.DB.CacheGet(ctx, homeContentCacheKey, &cached); err == nil {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"success": true,
@@ -73,12 +74,22 @@ func (h *HomeContentHandler) GetHomeContent(c *fiber.Ctx) error {
 		return fiberError(c, err, "Failed to fetch tech highlight")
 	}
 
-	payload := models.HomeContent{
+	gallery, err := h.fetchGalleryImages(ctx)
+	if err != nil {
+		return fiberError(c, err, "Failed to fetch gallery images")
+	}
+
+	base := models.HomeContent{
 		HeroSlides:  heroSlides,
 		Categories:  categories,
 		Collections: collections,
 		TechCards:   techCards,
 		Highlight:   highlight,
+	}
+
+	payload := models.HomeContentWithGallery{
+		HomeContent: base,
+		Gallery:     gallery,
 	}
 
 	// Cache for five minutes to avoid excessive DB hits while remaining responsive to updates.
@@ -626,6 +637,140 @@ func (h *HomeContentHandler) DeleteTechCard(c *fiber.Ctx) error {
 	})
 }
 
+// ============ Gallery Images CRUD ============
+
+// ListGalleryImages returns all gallery images for admin management.
+func (h *HomeContentHandler) ListGalleryImages(c *fiber.Ctx) error {
+	ctx := c.Context()
+	images, err := h.fetchGalleryImages(ctx)
+	if err != nil {
+		return fiberError(c, err, "Failed to fetch gallery images")
+	}
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "Gallery images retrieved successfully",
+		"data":    images,
+	})
+}
+
+// CreateGalleryImage inserts a new gallery image document.
+func (h *HomeContentHandler) CreateGalleryImage(c *fiber.Ctx) error {
+	ctx := c.Context()
+	var payload models.GalleryImage
+	if err := c.BodyParser(&payload); err != nil {
+		return fiberBadRequest(c, "Invalid payload", err)
+	}
+	if err := validateGalleryImage(&payload); err != nil {
+		return fiberBadRequest(c, err.Error(), err)
+	}
+
+	coll := h.DB.MongoDB.Collection(galleryCollectionName)
+	now := time.Now().UTC()
+	payload.ID = primitive.NilObjectID
+	payload.CreatedAt = now
+	payload.UpdatedAt = now
+	if payload.Position <= 0 {
+		count, err := coll.CountDocuments(ctx, bson.M{})
+		if err == nil {
+			payload.Position = int(count) + 1
+		} else {
+			payload.Position = 1
+		}
+	}
+
+	res, err := coll.InsertOne(ctx, payload)
+	if err != nil {
+		return fiberError(c, err, "Failed to create gallery image")
+	}
+	if insertedID, ok := res.InsertedID.(primitive.ObjectID); ok {
+		payload.ID = insertedID
+	}
+
+	h.clearHomeCache(ctx)
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"success": true,
+		"message": "Gallery image created",
+		"data":    payload,
+	})
+}
+
+// UpdateGalleryImage updates an existing gallery image (alt text/position)
+func (h *HomeContentHandler) UpdateGalleryImage(c *fiber.Ctx) error {
+	ctx := c.Context()
+	objectID, err := parseObjectID(c.Params("id"))
+	if err != nil {
+		return fiberBadRequest(c, "Invalid gallery image id", err)
+	}
+
+	var payload models.GalleryImage
+	if err := c.BodyParser(&payload); err != nil {
+		return fiberBadRequest(c, "Invalid payload", err)
+	}
+	// url optional on update; validate basic fields if provided
+	if strings.TrimSpace(payload.Url) == "" {
+		// allow keeping existing URL; build update without url unless provided
+	}
+
+	update := bson.M{
+		"alt":       payload.Alt,
+		"updatedAt": time.Now().UTC(),
+	}
+	if payload.Position > 0 {
+		update["position"] = payload.Position
+	}
+	if strings.TrimSpace(payload.Url) != "" {
+		update["url"] = payload.Url
+	}
+
+	coll := h.DB.MongoDB.Collection(galleryCollectionName)
+	res, err := coll.UpdateByID(ctx, objectID, bson.M{"$set": update})
+	if err != nil {
+		return fiberError(c, err, "Failed to update gallery image")
+	}
+	if res.MatchedCount == 0 {
+		return fiberNotFound(c, "Gallery image not found")
+	}
+
+	var updated models.GalleryImage
+	if err := coll.FindOne(ctx, bson.M{"_id": objectID}).Decode(&updated); err != nil {
+		return fiberError(c, err, "Failed to load updated gallery image")
+	}
+
+	h.clearHomeCache(ctx)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "Gallery image updated",
+		"data":    updated,
+	})
+}
+
+// DeleteGalleryImage removes a gallery image by id.
+func (h *HomeContentHandler) DeleteGalleryImage(c *fiber.Ctx) error {
+	ctx := c.Context()
+	objectID, err := parseObjectID(c.Params("id"))
+	if err != nil {
+		return fiberBadRequest(c, "Invalid gallery image id", err)
+	}
+
+	coll := h.DB.MongoDB.Collection(galleryCollectionName)
+	res, err := coll.DeleteOne(ctx, bson.M{"_id": objectID})
+	if err != nil {
+		return fiberError(c, err, "Failed to delete gallery image")
+	}
+	if res.DeletedCount == 0 {
+		return fiberNotFound(c, "Gallery image not found")
+	}
+
+	h.clearHomeCache(ctx)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "Gallery image deleted",
+	})
+}
+
 // GetTechHighlight returns the current showcase highlight for admin editing.
 func (h *HomeContentHandler) GetTechHighlight(c *fiber.Ctx) error {
 	ctx := c.Context()
@@ -782,6 +927,22 @@ func (h *HomeContentHandler) fetchTechHighlight(ctx context.Context) (*models.Te
 	return &highlight, nil
 }
 
+func (h *HomeContentHandler) fetchGalleryImages(ctx context.Context) ([]models.GalleryImage, error) {
+	coll := h.DB.MongoDB.Collection(galleryCollectionName)
+	opts := options.Find().SetSort(bson.D{{Key: "position", Value: 1}, {Key: "createdAt", Value: 1}})
+	cursor, err := coll.Find(ctx, bson.M{}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var images []models.GalleryImage
+	if err := cursor.All(ctx, &images); err != nil {
+		return nil, err
+	}
+	return images, nil
+}
+
 func (h *HomeContentHandler) clearHomeCache(ctx context.Context) {
 	_ = h.DB.CacheDel(ctx, homeContentCacheKey)
 }
@@ -882,6 +1043,19 @@ func validateHighlight(highlight *models.TechShowcaseHighlight) error {
 	}
 	if strings.TrimSpace(highlight.Background) == "" {
 		highlight.Background = "bg-rose-50"
+	}
+	return nil
+}
+
+func validateGalleryImage(img *models.GalleryImage) error {
+	if strings.TrimSpace(img.Url) == "" {
+		return errors.New("url is required")
+	}
+	if img.Position < 0 {
+		img.Position = 0
+	}
+	if strings.TrimSpace(img.Alt) == "" {
+		img.Alt = "Gallery image"
 	}
 	return nil
 }

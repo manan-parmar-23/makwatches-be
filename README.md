@@ -238,7 +238,22 @@ LOG_LEVEL=debug
 3. Navigate to "APIs & Services" > "Credentials"
 4. Click "Create Credentials" > "OAuth client ID"
 5. Select "Web application" as the application type
-6. Add your domain to "Authorized JavaScript origins" (e.g., `http://localhost:8080`)
-7. Add your callback URL to "Authorized redirect URIs" (e.g., `http://localhost:8080/auth/google/callback`)
-8. Copy the Client ID and Client Secret to your `.env` file
-9. For production, update the redirect URL to your production domain (e.g., `https://api.pehnaw.com/auth/google/callback`)
+6. Add your domain(s) to "Authorized JavaScript origins". During development you may use `http://localhost:8080` and `http://localhost:3000`. For production add the frontend origins used by your site, for example:
+
+   - `https://mak-watches.vercel.app`
+   - `https://makwatches.in`
+
+7. Add your callback (redirect) URL(s) to "Authorized redirect URIs". These must match the redirect URL used by the backend when initiating Google OAuth. Add both development and production callback URLs, for example:
+
+   - `http://localhost:8080/auth/google/callback`
+   - `http://localhost:3000/auth/google/callback` (if your frontend handles callbacks on port 3000)
+   - `https://mak-watches.vercel.app/auth/google/callback`
+   - `https://makwatches.in/auth/google/callback`
+
+8. Copy the Client ID and Client Secret to your `.env` file (see the repository `example.env` for keys).
+
+9. Ensure your backend is configured to use the correct `GOOGLE_REDIRECT_URL` for the environment. In this project the `GOOGLE_REDIRECT_URL` environment variable controls the redirect URI used when creating the Google OAuth client. For example, in production you can set:
+
+   - `GOOGLE_REDIRECT_URL=https://mak-watches.vercel.app/auth/google/callback`
+
+   Or, if your backend lives on a different domain (API domain), set it accordingly, e.g. `https://api.makwatches.in/auth/google/callback` and add that value to the Google Console redirect URIs as well.

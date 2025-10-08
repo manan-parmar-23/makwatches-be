@@ -53,7 +53,7 @@ func LoadConfig() (*Config, error) {
 		Port:               getEnv("PORT", "8080"),
 		Environment:        getEnv("ENVIRONMENT", "development"),
 		MongoURI:           getEnv("MONGO_URI", "mongodb://localhost:27017"),
-		DatabaseName:       getEnv("DATABASE_NAME", "pehnaw"),
+		DatabaseName:       getEnv("DATABASE_NAME", "makwatches"),
 		RedisURI:           getEnv("REDIS_URI", "localhost:6379"),
 		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
 		JWTSecret:          getEnv("JWT_SECRET", "your_jwt_secret_key_here"),
@@ -74,7 +74,7 @@ func LoadConfig() (*Config, error) {
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/google/callback"),
 		// Firebase config
 		FirebaseCredentialsPath: getEnv("FIREBASE_CREDENTIALS_PATH", "firebase-admin.json"),
-		FirebaseBucketName:      getEnv("FIREBASE_BUCKET_NAME", ""),
+		FirebaseBucketName:      getEnv("FIREBASE_BUCKET_NAME", "makwatches-1ae1a.firebasestorage.app"),
 	}
 
 	return cfg, nil

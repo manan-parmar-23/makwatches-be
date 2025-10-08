@@ -89,3 +89,19 @@ type HomeContent struct {
 	TechCards   []TechShowcaseCard      `json:"techCards"`
 	Highlight   *TechShowcaseHighlight  `json:"highlight"`
 }
+
+// GalleryImage represents a single image in the homepage gallery section
+type GalleryImage struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	Url       string             `bson:"url" json:"url"`
+	Alt       string             `bson:"alt" json:"alt"`
+	Position  int                `bson:"position" json:"position"`
+	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
+	UpdatedAt time.Time          `bson:"updatedAt" json:"updatedAt"`
+}
+
+// Extend HomeContent to include gallery images (backwards compatible for existing clients not using it)
+type HomeContentWithGallery struct {
+	HomeContent
+	Gallery []GalleryImage `json:"gallery"`
+}

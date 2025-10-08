@@ -61,7 +61,7 @@ func main() {
 
 	// Initialize Fiber app with custom error handling
 	app := fiber.New(fiber.Config{
-		AppName:      "Pehnaw API",
+		AppName:      "Makwatches API",
 		ErrorHandler: customErrorHandler,
 		BodyLimit:    10 * 1024 * 1024, // 10MB
 	})

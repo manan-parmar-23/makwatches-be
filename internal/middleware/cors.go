@@ -5,7 +5,7 @@ import "github.com/gofiber/fiber/v2"
 // CORSConfig holds allowed origins for future extensibility
 var AllowedOrigins = []string{
 	"http://localhost:3000",
-	// Add more origins here as needed
+	"https://mak-watches.vercel.app",
 }
 
 func CORSMiddleware() fiber.Handler {

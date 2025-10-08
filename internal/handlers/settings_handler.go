@@ -39,7 +39,7 @@ func (h *SettingsHandler) GetSettings() fiber.Handler {
 			if err == mongo.ErrNoDocuments {
 				// Return default settings if none exist
 				defaultSettings := models.Settings{
-					StoreName:          "Pehnaw",
+					StoreName:          "Makwatches",
 					StoreDescription:   "Your fashion destination",
 					Currency:           "INR",
 					TaxRate:            18.0, // Default GST in India
