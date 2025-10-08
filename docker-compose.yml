@@ -5,39 +5,84 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: makwatches-be:local
-    container_name: makwatches-be
+    image: makwatches-be:latest
+    container_name: makwatches-be-api
     ports:
       - "8080:8080"
     environment:
-      - ENVIRONMENT=development
+      - ENVIRONMENT=${ENVIRONMENT:-production}
       - PORT=8080
-      # Point API to the MongoDB container
-      - MONGO_URI=mongodb://mongodb:27017
-      - DATABASE_NAME=pehnaw
-      # Point API to the Redis container (optional, app continues without Redis if down)
-      - REDIS_URI=redis:6379
-      - JWT_SECRET=your_jwt_secret_key_here
-    depends_on:
-      - mongodb
-      - redis
-    restart: unless-stopped
-
-  mongodb:
-    image: mongo:6.0
-    container_name: makwatches-mongodb
-    ports:
-      - "27017:27017"
+      # MongoDB configuration - use cloud MongoDB by default
+      - MONGO_URI=${MONGO_URI}
+      - DATABASE_NAME=${DATABASE_NAME:-makwatches}
+      # Redis configuration - use cloud Redis
+      - REDIS_URI=${REDIS_URI}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DATABASE_NAME=${REDIS_DATABASE_NAME}
+      # JWT configuration
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRY=${JWT_EXPIRY:-24h}
+      # Google OAuth configuration
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URL=${GOOGLE_REDIRECT_URL}
+      # Razorpay configuration
+      - RAZORPAY_MODE=${RAZORPAY_MODE:-test}
+      - RAZORPAY_KEY_ID_TEST=${RAZORPAY_KEY_ID_TEST}
+      - RAZORPAY_KEY_SECRET_TEST=${RAZORPAY_KEY_SECRET_TEST}
+      # Firebase configuration
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_BUCKET_NAME=${FIREBASE_BUCKET_NAME}
+      - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH:-firebase-admin.json}
+      # CORS origins
+      - VERCEL_ORIGIN=${VERCEL_ORIGIN:-https://mak-watches.vercel.app}
+      - DEV_ORIGIN=${DEV_ORIGIN:-http://localhost:4200}
     volumes:
-      - mongodb_data:/data/db
+      - ./uploads:/app/uploads
+      - ./firebase-admin.json:/app/firebase-admin.json:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - makwatches-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: makwatches-redis
-    ports:
-      - "6379:6379"
-    restart: unless-stopped
+  # Optional: Local MongoDB for development (commented out by default)
+  # mongodb:
+  #   image: mongo:6.0
+  #   container_name: makwatches-mongodb
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongodb_data:/data/db
+  #   environment:
+  #     - MONGO_INITDB_ROOT_USERNAME=admin
+  #     - MONGO_INITDB_ROOT_PASSWORD=password
+  #   restart: unless-stopped
+  #   networks:
+  #     - makwatches-network
+
+  # Optional: Local Redis for development (commented out by default)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: makwatches-redis
+  #   ports:
+  #     - "6379:6379"
+  #   command: redis-server --appendonly yes
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - makwatches-network
+
+networks:
+  makwatches-network:
+    driver: bridge
 
 volumes:
-  mongodb_data:
+  uploads:
+  # mongodb_data:
+  # redis_data:

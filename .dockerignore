@@ -1,19 +1,25 @@
 # Git
 .git
 .gitignore
+.gitattributes
 
-# Docker
-Dockerfile
-docker-compose.yml
+# Docker (don't copy docker files into image)
 .dockerignore
+
+# CI/CD
+.github
+.gitlab-ci.yml
 
 # IDE
 .idea/
 .vscode/
 *.sublime-workspace
 *.sublime-project
+*.swp
+*.swo
+*~
 
-# Environment variables
+# Environment variables (handled by docker-compose or CI/CD)
 .env
 .env.*
 !example.env
@@ -22,17 +28,31 @@ docker-compose.yml
 /bin/
 /tmp/
 /dist/
+/pkg/
 
 # Test files
 **/*_test.go
 **/testdata/
 
 # Documentation
-README.md
-CONTRIBUTING.md
+*.md
 LICENSE
 docs/
 
 # Development tools
 Makefile
-air.toml
+.air.toml
+dev.ps1
+create-makefile.ps1
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads directory (will be mounted as volume)
+uploads/*
+!uploads/.gitkeep
