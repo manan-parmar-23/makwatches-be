@@ -82,7 +82,7 @@ func (g *GoogleOAuth) Exchange(code string) (*oauth2.Token, error) {
 }
 
 // GetUserInfo retrieves user information from Google
-func (g *GoogleOAuth) GetUserInfo(token *oauth2.Token) (*GoogleUserInfo, error) {
+func (g *GoogleOAuth) GetUserInfo(token *oauth2.Token) (map[string]interface{}, error) {
 	client := g.config.Client(context.Background(), token)
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
@@ -95,10 +95,10 @@ func (g *GoogleOAuth) GetUserInfo(token *oauth2.Token) (*GoogleUserInfo, error) 
 		return nil, fmt.Errorf("failed to get user info: status %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	var userInfo GoogleUserInfo
+	var userInfo map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
 		return nil, fmt.Errorf("failed to decode user info: %w", err)
 	}
 
-	return &userInfo, nil
+	return userInfo, nil
 }
