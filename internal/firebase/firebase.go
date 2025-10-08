@@ -35,7 +35,7 @@ func NewFirebaseClient(ctx context.Context, credentialsPath, bucketName string) 
 	if err != nil {
 		log.Printf("[FIREBASE] Bucket validation failed: %v", err)
 		if contains404(err.Error()) {
-			return nil, fmt.Errorf("Firebase Storage bucket %q does not exist. Please verify the bucket name and enable Firebase Storage in your Firebase Console (https://console.firebase.google.com/).")
+			return nil, fmt.Errorf("Firebase Storage bucket %q does not exist. Please verify the bucket name and enable Firebase Storage in your Firebase Console (https://console.firebase.google.com/)", bucketName)
 		}
 		return nil, fmt.Errorf("failed to access bucket: %w", err)
 	}
