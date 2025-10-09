@@ -51,6 +51,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Validate Docker Hub credentials
+        run: |
+          if [ -z "${{ secrets.DOCKER_USERNAME }}" ]; then
+            echo "Error: DOCKER_USERNAME secret is not set"
+            echo "Please add DOCKER_USERNAME to your repository secrets"
+            exit 1
+          fi
+          if [ -z "${{ secrets.DOCKER_PASSWORD }}" ]; then
+            echo "Error: DOCKER_PASSWORD secret is not set"
+            echo "Please add DOCKER_PASSWORD to your repository secrets"
+            exit 1
+          fi
+          echo "Docker Hub credentials are configured"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
