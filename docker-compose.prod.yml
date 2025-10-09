@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   api:
     image: ${DOCKER_USERNAME}/makwatches-be:latest
