@@ -99,8 +99,8 @@ jobs:
     name: Deploy to Server
     runs-on: ubuntu-latest
     needs: docker-build-push
-    # Only deploy if server secrets are configured
-    if: github.ref == 'refs/heads/main' && secrets.SERVER_HOST != ''
+    # Only deploy on main branch (server secrets will be validated in the step)
+    if: github.ref == 'refs/heads/main'
     
     steps:
       - name: Deploy to Server via SSH
