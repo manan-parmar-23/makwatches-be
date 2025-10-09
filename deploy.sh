@@ -76,11 +76,11 @@ deploy() {
     
     # Stop existing containers
     log_info "Stopping existing containers..."
-    docker-compose -f $COMPOSE_FILE down || true
+    docker compose -f $COMPOSE_FILE down || true
     
     # Start new containers
     log_info "Starting new containers..."
-    docker-compose -f $COMPOSE_FILE up -d
+    docker compose -f $COMPOSE_FILE up -d
     
     # Wait for health check
     log_info "Waiting for application to be healthy..."
@@ -91,7 +91,7 @@ deploy() {
         log_success "Application deployed successfully!"
     else
         log_error "Application failed to start!"
-        docker-compose -f $COMPOSE_FILE logs --tail=50
+        docker compose -f $COMPOSE_FILE logs --tail=50
         exit 1
     fi
 }
@@ -104,25 +104,25 @@ cleanup() {
 
 show_status() {
     log_info "Application Status:"
-    docker-compose -f $COMPOSE_FILE ps
+    docker compose -f $COMPOSE_FILE ps
     echo ""
     log_info "Recent Logs:"
-    docker-compose -f $COMPOSE_FILE logs --tail=20
+    docker compose -f $COMPOSE_FILE logs --tail=20
 }
 
 show_logs() {
-    docker-compose -f $COMPOSE_FILE logs -f
+    docker compose -f $COMPOSE_FILE logs -f
 }
 
 stop_app() {
     log_info "Stopping application..."
-    docker-compose -f $COMPOSE_FILE down
+    docker compose -f $COMPOSE_FILE down
     log_success "Application stopped!"
 }
 
 restart_app() {
     log_info "Restarting application..."
-    docker-compose -f $COMPOSE_FILE restart
+    docker compose -f $COMPOSE_FILE restart
     log_success "Application restarted!"
 }
 
