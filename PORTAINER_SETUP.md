@@ -225,7 +225,7 @@ docker compose logs -f
 
 7. **Verify:**
    ```bash
-   curl http://localhost:8080/health
+   curl http://139.59.71.95/health
    ```
 
 ---
