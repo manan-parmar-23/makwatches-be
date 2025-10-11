@@ -94,7 +94,7 @@ sed -i '/^REDIS_PASSWORD=/d' .env
 cat >> .env << 'ENV_EOF'
 
 # Redis Configuration (Updated)
-REDIS_URI=redis://redis-14568.c301.ap-south-1-1.ec2.redns.redis-cloud.com:14568
+REDIS_URI=redis-14568.c301.ap-south-1-1.ec2.redns.redis-cloud.com:14568
 REDIS_PASSWORD=A2kpg3t6swc401ilemy8y452qyoz6l6b3rdu6ebj0e69pvfouy3
 ENV_EOF
 
