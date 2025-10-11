@@ -41,13 +41,11 @@ func main() {
 	// Initialize Redis client
 	redisClient, err := config.InitRedis(cfg)
 	if err != nil {
-		if cfg.Environment == "production" {
-			log.Fatal("Failed to connect to Redis in production environment: ", err)
-		}
 		log.Printf("Warning: Redis connection failed: %v", err)
 		log.Println("Continuing without Redis - caching will be disabled")
-		// Create a mock Redis client that returns cache misses
-		redisClient = redis.NewClient(&redis.Options{})
+		log.Println("This is expected if Redis is not configured")
+		// Create a nil Redis client - handlers should check for nil
+		redisClient = nil
 	}
 	defer func() {
 		if redisClient != nil {
