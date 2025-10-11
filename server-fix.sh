@@ -1,31 +1,14 @@
 #!/bin/bash
 
-# Complete Fix Script for MakWatches Backend
-# This script will fix the Redis DNS issue and setup the domain
+# RUN THIS SCRIPT ON YOUR SERVER (139.59.71.95)
+# ssh root@139.59.71.95
+# Then copy and paste this entire script
 
 echo "╔════════════════════════════════════════════════════════════════════╗"
 echo "║                                                                    ║"
-echo "║   🔧 COMPLETE FIX FOR MAKWATCHES BACKEND                          ║"
+echo "║   🔧 FIX REDIS DNS + SETUP DOMAIN                                 ║"
 echo "║                                                                    ║"
 echo "╚════════════════════════════════════════════════════════════════════╝"
-echo ""
-
-SERVER_IP="139.59.71.95"
-DOMAIN="api.makwatches.in"
-
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "STEP 1: Push Updated docker-compose.yml with DNS Fix"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "✅ docker-compose.prod.yml already updated with Google DNS"
-echo "   This will fix: 'no such host' error for Redis"
-echo ""
-
-# Create the complete server fix script
-cat > /tmp/server-fix.sh << 'SERVER_FIX_EOF'
-#!/bin/bash
-
-echo "🔧 Fixing Redis DNS and Configuration on Server..."
 echo ""
 
 cd /opt/makwatches-be || exit 1
@@ -103,10 +86,11 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 # Backup .env
 cp .env .env.backup.$(date +%s)
 
-# Update Redis configuration
+# Remove old Redis config
 sed -i '/^REDIS_URI=/d' .env
 sed -i '/^REDIS_PASSWORD=/d' .env
 
+# Add new Redis config
 cat >> .env << 'ENV_EOF'
 
 # Redis Configuration (Updated)
@@ -131,8 +115,8 @@ echo "✅ Containers started with new configuration"
 echo ""
 
 # Wait for container to start
-echo "Waiting 10 seconds for container to start..."
-sleep 10
+echo "Waiting 15 seconds for container to start..."
+sleep 15
 
 # Step 4: Check status
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -157,98 +141,115 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 sleep 5
-if curl -f http://localhost:8080/health 2>/dev/null; then
+if curl -f -s http://localhost:8080/health; then
     echo ""
-    echo "✅ API is responding successfully!"
-else
+    echo "✅ ✅ ✅ API IS WORKING! ✅ ✅ ✅"
     echo ""
-    echo "⚠️  API not responding yet. Check logs above."
-fi
-
-echo ""
-echo "╔════════════════════════════════════════════════════════════════════╗"
-echo "║                                                                    ║"
-echo "║   ✅ REDIS FIX COMPLETE!                                          ║"
-echo "║                                                                    ║"
-echo "╚════════════════════════════════════════════════════════════════════╝"
-echo ""
-echo "Access your API at:"
-echo "  • http://139.59.71.95:8080/health"
-echo "  • View in Portainer: http://139.59.71.95:9000"
-echo ""
-echo "Next: Setup domain with 'bash setup-domain.sh'"
-echo ""
-SERVER_FIX_EOF
-
-echo "✅ Server fix script created"
-echo ""
-
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "STEP 2: Upload and Run Fix on Server"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "Uploading fix script to server..."
-
-# Upload script
-scp /tmp/server-fix.sh root@${SERVER_IP}:/tmp/server-fix.sh
-
-echo "✅ Script uploaded"
-echo ""
-echo "Running fix on server..."
-echo ""
-
-# Run the fix
-ssh root@${SERVER_IP} "chmod +x /tmp/server-fix.sh && /tmp/server-fix.sh"
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "STEP 3: Setup Domain (if DNS is ready)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "Checking if DNS is configured..."
-echo ""
-
-if nslookup ${DOMAIN} | grep -q "${SERVER_IP}"; then
-    echo "✅ DNS is configured correctly!"
+    
+    # Now setup domain
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "7. Setting up domain with Nginx + SSL..."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    read -p "Setup domain with SSL now? (y/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Setting up domain..."
-        ssh root@${SERVER_IP} "cd /opt/makwatches-be && bash setup-domain.sh"
-    else
-        echo "⏩ Skipped. You can run it later with:"
-        echo "   ssh root@${SERVER_IP}"
-        echo "   cd /opt/makwatches-be"
-        echo "   bash setup-domain.sh"
+    
+    # Install Nginx if not present
+    if ! command -v nginx &> /dev/null; then
+        echo "Installing Nginx..."
+        apt update -qq
+        apt install -y nginx
+        systemctl enable nginx
     fi
+    
+    # Create Nginx config
+    cat > /etc/nginx/sites-available/api.makwatches.in << 'NGINX_EOF'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name api.makwatches.in;
+    
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+    
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    access_log /var/log/nginx/api.makwatches.in.access.log;
+    error_log /var/log/nginx/api.makwatches.in.error.log;
+}
+NGINX_EOF
+    
+    # Enable site
+    ln -sf /etc/nginx/sites-available/api.makwatches.in /etc/nginx/sites-enabled/
+    rm -f /etc/nginx/sites-enabled/default
+    
+    # Test and reload Nginx
+    if nginx -t; then
+        systemctl reload nginx
+        echo "✅ Nginx configured"
+    fi
+    
+    # Install Certbot and get SSL
+    if ! command -v certbot &> /dev/null; then
+        echo "Installing Certbot..."
+        apt install -y certbot python3-certbot-nginx
+    fi
+    
+    echo ""
+    echo "Getting SSL certificate..."
+    if certbot --nginx -d api.makwatches.in --non-interactive --agree-tos --email adityagarg646@gmail.com --redirect; then
+        echo "✅ SSL certificate installed!"
+    else
+        echo "⚠️  SSL setup skipped (run manually if needed)"
+    fi
+    
+    # Allow firewall
+    if command -v ufw &> /dev/null && ufw status | grep -q "Status: active"; then
+        ufw allow 'Nginx Full'
+    fi
+    
 else
-    echo "⚠️  DNS not configured yet or not propagated"
     echo ""
-    echo "Add this DNS record:"
-    echo "  Type: A"
-    echo "  Name: api"
-    echo "  Value: ${SERVER_IP}"
+    echo "⚠️  API not responding yet. Check logs above for errors."
     echo ""
-    echo "Then run domain setup:"
-    echo "  ssh root@${SERVER_IP}"
-    echo "  cd /opt/makwatches-be"
-    echo "  bash setup-domain.sh"
+    echo "Common fixes:"
+    echo "  • Wait 30 more seconds and test: curl http://localhost:8080/health"
+    echo "  • Check logs: docker logs -f makwatches-be-api"
+    echo "  • Check Portainer: http://139.59.71.95:9000"
 fi
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════════════╗"
 echo "║                                                                    ║"
-echo "║   🎉 SETUP COMPLETE!                                              ║"
+echo "║   ✅ SETUP COMPLETE!                                              ║"
 echo "║                                                                    ║"
 echo "╚════════════════════════════════════════════════════════════════════╝"
 echo ""
-echo "Your API endpoints:"
-echo "  📍 Direct IP: http://${SERVER_IP}:8080/health"
-echo "  🌐 Domain: http://${DOMAIN}/health (after domain setup)"
-echo "  🔒 HTTPS: https://${DOMAIN}/health (after domain setup)"
+echo "🎯 Your API is accessible at:"
 echo ""
-echo "Management:"
-echo "  🐳 Portainer: http://${SERVER_IP}:9000"
+echo "  📍 Direct IP:  http://139.59.71.95:8080/health"
+echo "  🌐 HTTP:       http://api.makwatches.in/health"
+echo "  🔒 HTTPS:      https://api.makwatches.in/health"
+echo ""
+echo "🐳 Management:"
+echo "  Portainer: http://139.59.71.95:9000"
+echo ""
+echo "📝 Test commands:"
+echo "  curl http://localhost:8080/health"
+echo "  curl http://api.makwatches.in/health"
+echo "  curl https://api.makwatches.in/health"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
