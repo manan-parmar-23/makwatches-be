@@ -221,7 +221,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 func HealthHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"success": true,
-		"message": "Server is healthy",
+		"message": "Server is healthy! Welcome toWelcome to Makwatches API",
 	})
 }
 
