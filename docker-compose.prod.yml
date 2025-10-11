@@ -5,6 +5,9 @@ services:
     restart: always
     ports:
       - "${PORT:-8080}:8080"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     environment:
       - ENVIRONMENT=production
       - PORT=8080
