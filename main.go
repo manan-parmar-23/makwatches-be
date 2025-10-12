@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/config"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/database"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/handlers"
@@ -40,13 +40,11 @@ func main() {
 	// Initialize Redis client
 	redisClient, err := config.InitRedis(cfg)
 	if err != nil {
-		if cfg.Environment == "production" {
-			log.Fatal("Failed to connect to Redis in production environment: ", err)
-		}
 		log.Printf("Warning: Redis connection failed: %v", err)
 		log.Println("Continuing without Redis - caching will be disabled")
-		// Create a mock Redis client that returns cache misses
-		redisClient = redis.NewClient(&redis.Options{})
+		log.Println("This is expected if Redis is not configured")
+		// Create a nil Redis client - handlers should check for nil
+		redisClient = nil
 	}
 	defer func() {
 		if redisClient != nil {
@@ -64,7 +62,23 @@ func main() {
 		AppName:      "Makwatches API",
 		ErrorHandler: customErrorHandler,
 		BodyLimit:    10 * 1024 * 1024, // 10MB
+
 	})
+
+	// Configure CORS for production and development
+	// Allow list is CSV; default includes production domains and Vercel preview, plus common local dev ports
+	prodOrigins := cfg.GetEnvOrDefault("ALLOWED_ORIGINS", "https://makwatches.in,https://www.makwatches.in,https://mak-watches.vercel.app")
+	devOrigins := cfg.GetEnvOrDefault("DEV_ORIGINS", "http://localhost:4200,http://localhost:3000")
+	allOrigins := prodOrigins + "," + devOrigins
+
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     allOrigins,
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Requested-With, X-CSRF-Token",
+		AllowCredentials: true,
+		ExposeHeaders:    "Content-Length, Access-Control-Allow-Origin, Access-Control-Allow-Headers",
+		MaxAge:           300,
+	}))
 
 	// Setup all routes and middleware
 	handlers.SetupRoutes(app, dbClient, cfg)

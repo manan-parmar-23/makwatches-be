@@ -3,7 +3,9 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -104,4 +106,33 @@ func (h *PaymentHandler) CreateRazorpayOrder(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"success": true, "key": h.Cfg.RazorpayKey, "amount": amountPaise, "currency": "INR", "data": json.RawMessage(body)})
+}
+
+// RazorpayWebhook validates webhook signatures from Razorpay
+// Set the endpoint URL in Razorpay dashboard and use Cfg.RazorpayWebhookSecret
+func (h *PaymentHandler) RazorpayWebhook(c *fiber.Ctx) error {
+	if h.Cfg.RazorpayWebhookSecret == "" {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"success": false, "message": "Webhook secret not configured"})
+	}
+
+	sig := c.Get("X-Razorpay-Signature")
+	if sig == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Missing signature"})
+	}
+
+	body := c.Body()
+	mac := hmac.New(sha256.New, []byte(h.Cfg.RazorpayWebhookSecret))
+	mac.Write(body)
+	expected := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(expected), []byte(sig)) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid webhook signature"})
+	}
+
+	// Parse event (optional minimal handling)
+	var evt map[string]any
+	if err := json.Unmarshal(body, &evt); err == nil {
+		// You can extend: update order/payment status based on event
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"success": true})
 }

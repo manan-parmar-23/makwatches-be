@@ -186,6 +186,19 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 		}
 	}
 
+	// Determine order and payment statuses
+	orderStatus := "pending"  // pending -> processing -> shipped -> delivered/cancelled/returned
+	paymentStatus := "unpaid" // unpaid | paid | refunded | failed
+	switch req.PaymentInfo.Method {
+	case "razorpay":
+		// Signature already verified above, consider payment successful
+		paymentStatus = "paid"
+		orderStatus = "processing"
+	case "cod":
+		paymentStatus = "unpaid"
+		orderStatus = "processing"
+	}
+
 	// Create the order
 	now := time.Now()
 	order := models.Order{
@@ -193,7 +206,8 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 		UserID:          user.UserID,
 		Items:           orderItems,
 		Total:           total,
-		Status:          "pending",
+		Status:          orderStatus,
+		PaymentStatus:   paymentStatus,
 		ShippingAddress: req.ShippingAddress,
 		PaymentInfo:     req.PaymentInfo,
 		CreatedAt:       now,
@@ -317,6 +331,7 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 		Items           []models.OrderItem `json:"items"`
 		Total           float64            `json:"total"`
 		Status          string             `json:"status"`
+		PaymentStatus   string             `json:"paymentStatus"`
 		ShippingAddress models.Address     `json:"shippingAddress"`
 		PaymentInfo     models.PaymentInfo `json:"paymentInfo"`
 		CreatedAt       time.Time          `json:"createdAt"`
@@ -324,12 +339,23 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 	}
 	var respOrders []OrderResponse
 	for _, o := range orders {
+		payStatus := o.PaymentStatus
+		if payStatus == "" {
+			if o.Status == "paid" || o.PaymentInfo.RazorpayPaymentID != "" {
+				payStatus = "paid"
+			} else if o.Status == "cancelled" {
+				payStatus = "refunded"
+			} else {
+				payStatus = "unpaid"
+			}
+		}
 		respOrders = append(respOrders, OrderResponse{
 			ID:              o.ID.Hex(),
 			UserID:          o.UserID.Hex(),
 			Items:           o.Items,
 			Total:           o.Total,
 			Status:          o.Status,
+			PaymentStatus:   payStatus,
 			ShippingAddress: o.ShippingAddress,
 			PaymentInfo:     o.PaymentInfo,
 			CreatedAt:       o.CreatedAt,
@@ -464,7 +490,8 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 
 	// Parse request body
 	type StatusUpdate struct {
-		Status string `json:"status"`
+		Status        string `json:"status"`
+		PaymentStatus string `json:"paymentStatus,omitempty"`
 	}
 	var req StatusUpdate
 	if err := c.BodyParser(&req); err != nil {
@@ -475,7 +502,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate status
+	// Validate statuses
 	validStatuses := map[string]bool{
 		"pending":    true,
 		"processing": true,
@@ -492,18 +519,33 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 		})
 	}
 
+	validPaymentStatuses := map[string]bool{
+		"unpaid":   true,
+		"paid":     true,
+		"failed":   true,
+		"refunded": true,
+	}
+	if req.PaymentStatus != "" && !validPaymentStatuses[req.PaymentStatus] {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid payment status. Must be one of: unpaid, paid, failed, refunded",
+		})
+	}
+
 	// Update the order status
 	now := time.Now()
 	orderCollection := h.DB.Collections().Orders
+	setFields := bson.M{
+		"status":     req.Status,
+		"updated_at": now,
+	}
+	if req.PaymentStatus != "" {
+		setFields["payment_status"] = req.PaymentStatus
+	}
 	result, err := orderCollection.UpdateOne(
 		ctx,
 		bson.M{"_id": orderID},
-		bson.M{
-			"$set": bson.M{
-				"status":     req.Status,
-				"updated_at": now,
-			},
-		},
+		bson.M{"$set": setFields},
 	)
 
 	if err != nil {
@@ -604,17 +646,20 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 		})
 	}
 
-	// Update the order status to "cancelled"
+	// Update the order status to "cancelled" and set paymentStatus if prepaid
 	now := time.Now()
+	setCancel := bson.M{
+		"status":     "cancelled",
+		"updated_at": now,
+	}
+	if order.PaymentStatus == "paid" {
+		// Business rule: mark as refunded; real refund should be processed via gateway
+		setCancel["payment_status"] = "refunded"
+	}
 	_, err = orderCollection.UpdateOne(
 		ctx,
 		bson.M{"_id": orderID},
-		bson.M{
-			"$set": bson.M{
-				"status":     "cancelled",
-				"updated_at": now,
-			},
-		},
+		bson.M{"$set": setCancel},
 	)
 
 	if err != nil {
@@ -690,22 +735,51 @@ func (h *OrderHandler) GetAllOrders(c *fiber.Ctx) error {
 	type OrderResponse struct {
 		ID              string             `json:"id"`
 		UserID          string             `json:"userId"`
+		CustomerName    string             `json:"customerName"`
 		Items           []models.OrderItem `json:"items"`
 		Total           float64            `json:"total"`
 		Status          string             `json:"status"`
+		PaymentStatus   string             `json:"paymentStatus"`
 		ShippingAddress models.Address     `json:"shippingAddress"`
 		PaymentInfo     models.PaymentInfo `json:"paymentInfo"`
 		CreatedAt       time.Time          `json:"createdAt"`
 		UpdatedAt       time.Time          `json:"updatedAt"`
 	}
+	userCollection := h.DB.Collections().Users
+	// Cache userId to name to avoid duplicate DB calls
+	userNameCache := make(map[string]string)
 	var respOrders []OrderResponse
 	for _, o := range orders {
+		payStatus := o.PaymentStatus
+		if payStatus == "" {
+			if o.Status == "paid" || o.PaymentInfo.RazorpayPaymentID != "" {
+				payStatus = "paid"
+			} else if o.Status == "cancelled" {
+				payStatus = "refunded"
+			} else {
+				payStatus = "unpaid"
+			}
+		}
+		userIdStr := o.UserID.Hex()
+		customerName := ""
+		if cached, ok := userNameCache[userIdStr]; ok {
+			customerName = cached
+		} else {
+			var user models.User
+			err := userCollection.FindOne(ctx, bson.M{"_id": o.UserID}).Decode(&user)
+			if err == nil {
+				customerName = user.Name
+			}
+			userNameCache[userIdStr] = customerName
+		}
 		respOrders = append(respOrders, OrderResponse{
 			ID:              o.ID.Hex(),
-			UserID:          o.UserID.Hex(),
+			UserID:          userIdStr,
+			CustomerName:    customerName,
 			Items:           o.Items,
 			Total:           o.Total,
 			Status:          o.Status,
+			PaymentStatus:   payStatus,
 			ShippingAddress: o.ShippingAddress,
 			PaymentInfo:     o.PaymentInfo,
 			CreatedAt:       o.CreatedAt,

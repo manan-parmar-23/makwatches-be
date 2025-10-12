@@ -8,33 +8,35 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - PORT=8080
+      ENVIRONMENT: "${ENVIRONMENT:-production}"
+      PORT: "8080"
       # MongoDB configuration - use cloud MongoDB by default
-      - MONGO_URI=${MONGO_URI}
-      - DATABASE_NAME=${DATABASE_NAME:-makwatches}
+      MONGO_URI: ${MONGO_URI}
+      DATABASE_NAME: "${DATABASE_NAME:-makwatches}"
       # Redis configuration - use cloud Redis
-      - REDIS_URI=${REDIS_URI}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_DATABASE_NAME=${REDIS_DATABASE_NAME}
+      REDIS_URI: ${REDIS_URI}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DATABASE_NAME: ${REDIS_DATABASE_NAME}
       # JWT configuration
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_EXPIRY=${JWT_EXPIRY:-24h}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY: "${JWT_EXPIRY:-24h}"
       # Google OAuth configuration
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - GOOGLE_REDIRECT_URL=${GOOGLE_REDIRECT_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL}
       # Razorpay configuration
-      - RAZORPAY_MODE=${RAZORPAY_MODE:-test}
-      - RAZORPAY_KEY_ID_TEST=${RAZORPAY_KEY_ID_TEST}
-      - RAZORPAY_KEY_SECRET_TEST=${RAZORPAY_KEY_SECRET_TEST}
+      RAZORPAY_MODE: "${RAZORPAY_MODE:-test}"
+      RAZORPAY_KEY_ID_TEST: ${RAZORPAY_KEY_ID_TEST}
+      RAZORPAY_KEY_SECRET_TEST: ${RAZORPAY_KEY_SECRET_TEST}
       # Firebase configuration
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
-      - FIREBASE_BUCKET_NAME=${FIREBASE_BUCKET_NAME}
-      - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH:-firebase-admin.json}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_BUCKET_NAME: ${FIREBASE_BUCKET_NAME}
+      FIREBASE_CREDENTIALS_PATH: "${FIREBASE_CREDENTIALS_PATH:-firebase-admin.json}"
       # CORS origins
-      - VERCEL_ORIGIN=${VERCEL_ORIGIN:-https://mak-watches.vercel.app}
-      - DEV_ORIGIN=${DEV_ORIGIN:-http://localhost:4200}
+      VERCEL_ORIGIN: "${VERCEL_ORIGIN:-https://mak-watches.vercel.app}"
+      DEV_ORIGIN: "${DEV_ORIGIN:-http://localhost:4200}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-https://makwatches.in,https://www.makwatches.in,https://mak-watches.vercel.app}"
+      DEV_ORIGINS: "${DEV_ORIGINS:-http://localhost:4200,http://localhost:3000}"
     volumes:
       - ./uploads:/app/uploads
       - ./firebase-admin.json:/app/firebase-admin.json:ro

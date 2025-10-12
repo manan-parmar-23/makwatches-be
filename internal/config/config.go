@@ -59,9 +59,21 @@ func LoadConfig() (*Config, error) {
 		JWTSecret:          getEnv("JWT_SECRET", "your_jwt_secret_key_here"),
 		JWTExpirationHours: getEnvAsInt("JWT_EXPIRATION_HOURS", 24),
 		RedisDatabase:      getEnvAsInt("REDIS_DATABASE", 0),
-		// Razorpay config
-		RazorpayKey:           getEnv("RAZORPAY_KEY", ""),
-		RazorpaySecret:        getEnv("RAZORPAY_SECRET", ""),
+		// Razorpay config (support both KEY/SECRET and KEY_ID/KEY_SECRET naming)
+		RazorpayKey: func() string {
+			v := getEnv("RAZORPAY_KEY", "")
+			if v != "" {
+				return v
+			}
+			return getEnv("RAZORPAY_KEY_ID", "")
+		}(),
+		RazorpaySecret: func() string {
+			v := getEnv("RAZORPAY_SECRET", "")
+			if v != "" {
+				return v
+			}
+			return getEnv("RAZORPAY_KEY_SECRET", "")
+		}(),
 		RazorpayWebhookSecret: getEnv("RAZORPAY_WEBHOOK_SECRET", ""),
 		// AWS S3 config
 		AWSS3AccessKey:  getEnv("AWS_S3_ACCESS_KEY", ""),
@@ -74,7 +86,7 @@ func LoadConfig() (*Config, error) {
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/google/callback"),
 		// Firebase config
 		FirebaseCredentialsPath: getEnv("FIREBASE_CREDENTIALS_PATH", "firebase-admin.json"),
-		FirebaseBucketName:      getEnv("FIREBASE_BUCKET_NAME", "makwatches-1ae1a.firebasestorage.app"),
+		FirebaseBucketName:      getEnv("FIREBASE_BUCKET_NAME", "mak-watches.firebasestorage.app"),
 	}
 
 	return cfg, nil
