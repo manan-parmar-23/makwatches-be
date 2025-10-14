@@ -9,26 +9,28 @@ services:
       - 8.8.8.8
       - 8.8.4.4
     environment:
-      - ENVIRONMENT=production
-      - PORT=8080
-      - MONGO_URI=${MONGO_URI}
-      - DATABASE_NAME=${DATABASE_NAME:-makwatches}
-      - REDIS_URI=${REDIS_URI}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_DATABASE_NAME=${REDIS_DATABASE_NAME}
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_EXPIRY=${JWT_EXPIRY:-24h}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - GOOGLE_REDIRECT_URL=${GOOGLE_REDIRECT_URL}
-      - RAZORPAY_MODE=${RAZORPAY_MODE:-live}
-      - RAZORPAY_KEY_ID_TEST=${RAZORPAY_KEY_ID_TEST}
-      - RAZORPAY_KEY_SECRET_TEST=${RAZORPAY_KEY_SECRET_TEST}
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
-      - FIREBASE_BUCKET_NAME=${FIREBASE_BUCKET_NAME}
-      - FIREBASE_CREDENTIALS_PATH=/app/firebase-admin.json
-      - VERCEL_ORIGIN=${VERCEL_ORIGIN:-https://mak-watches.vercel.app}
-      - DEV_ORIGIN=${DEV_ORIGIN:-http://localhost:4200}
+      ENVIRONMENT: production
+      PORT: "8080"
+      MONGO_URI: ${MONGO_URI}
+      DATABASE_NAME: "${DATABASE_NAME:-makwatches}"
+      REDIS_URI: ${REDIS_URI}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DATABASE_NAME: ${REDIS_DATABASE_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY: "${JWT_EXPIRY:-24h}"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL}
+      RAZORPAY_MODE: "${RAZORPAY_MODE:-live}"
+      RAZORPAY_KEY_ID_TEST: ${RAZORPAY_KEY_ID_TEST}
+      RAZORPAY_KEY_SECRET_TEST: ${RAZORPAY_KEY_SECRET_TEST}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_BUCKET_NAME: ${FIREBASE_BUCKET_NAME}
+      FIREBASE_CREDENTIALS_PATH: "/app/firebase-admin.json"
+      VERCEL_ORIGIN: "${VERCEL_ORIGIN:-https://mak-watches.vercel.app}"
+      DEV_ORIGIN: "${DEV_ORIGIN:-http://localhost:4200}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-https://makwatches.in,https://www.makwatches.in,https://mak-watches.vercel.app}"
+      DEV_ORIGINS: "${DEV_ORIGINS:-http://localhost:4200,http://localhost:3000}"
     volumes:
       - ./uploads:/app/uploads
       - ./firebase-admin.json:/app/firebase-admin.json:ro

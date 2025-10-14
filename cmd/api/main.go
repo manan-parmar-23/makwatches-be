@@ -65,11 +65,14 @@ func main() {
 
 	})
 
-	// Configure CORS: allow local dev and production Vercel origin (configurable via env)
-	vercelOrigin := cfg.GetEnvOrDefault("VERCEL_ORIGIN", "https://mak-watches.vercel.app")
-	devOrigin := cfg.GetEnvOrDefault("DEV_ORIGIN", "http://localhost:4200")
+	// Configure CORS for production and development
+	// Allow list is CSV; default includes production domains and Vercel preview, plus common local dev ports
+	prodOrigins := cfg.GetEnvOrDefault("ALLOWED_ORIGINS", "https://makwatches.in,https://www.makwatches.in,https://mak-watches.vercel.app")
+	devOrigins := cfg.GetEnvOrDefault("DEV_ORIGINS", "http://localhost:4200,http://localhost:3000")
+	allOrigins := prodOrigins + "," + devOrigins
+
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     vercelOrigin + "," + devOrigin,
+		AllowOrigins:     allOrigins,
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Requested-With",
 		AllowCredentials: true,

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
@@ -16,12 +15,6 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	// Middleware
 	app.Use(logger.New())
 	app.Use(recover.New())
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000,https://makwatches.in,https://www.makwatches.in",
-		AllowMethods:     "GET,POST,PUT,DELETE,PATCH",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-		AllowCredentials: true,
-	}))
 
 	// Health check endpoint
 	app.Get("/health", HealthHandler)
@@ -115,6 +108,9 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	payments := api.Group("/payments")
 	payments.Post("/razorpay/order", paymentHandler.CreateRazorpayOrder)
 
+	// Public webhook endpoint for Razorpay (Razorpay will POST here)
+	app.Post("/webhooks/razorpay", paymentHandler.RazorpayWebhook)
+
 	// Admin only routes (must authenticate first, then check role)
 	admin := app.Group("/admin", middleware.Auth(cfg.JWTSecret), middleware.Role("admin"))
 	admin.Get("/accounts", adminAccountHandler.GetAllAccounts)
@@ -167,6 +163,9 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	adminCategories.Patch("/:categoryId/subcategories/:subId", categoryHandler.UpdateSubcategoryName)
 	adminCategories.Delete("/:id", categoryHandler.DeleteCategory)
 	adminCategories.Delete("/:categoryId/subcategories/:subId", categoryHandler.DeleteSubcategory)
+	// Discount routes for categories
+	adminCategories.Put("/:id/discount", categoryHandler.UpdateCategoryDiscount)
+	adminCategories.Put("/:id/subcategories/:subId/discount", categoryHandler.UpdateSubcategoryDiscount)
 	adminOrders := orders.Group("/", middleware.Role("admin"))
 	adminOrders.Patch("/:orderID/status", orderHandler.UpdateOrderStatus)
 

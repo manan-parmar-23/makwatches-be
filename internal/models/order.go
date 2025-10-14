@@ -34,6 +34,7 @@ type Order struct {
 	Items           []OrderItem        `json:"items" bson:"items"`
 	Total           float64            `json:"total" bson:"total"`
 	Status          string             `json:"status" bson:"status"`
+	PaymentStatus   string             `json:"paymentStatus" bson:"payment_status"`
 	ShippingAddress Address            `json:"shippingAddress" bson:"shipping_address"`
 	PaymentInfo     PaymentInfo        `json:"paymentInfo" bson:"payment_info"`
 	CreatedAt       time.Time          `json:"createdAt" bson:"created_at"`

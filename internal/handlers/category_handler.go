@@ -345,3 +345,128 @@ func (h *CategoryHandler) GetPublicSubcategories(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"success": true, "message": "Subcategories retrieved successfully", "data": cat.Subcategories})
 }
+
+// UpdateCategoryDiscount updates discount settings for a category
+// @example Request:
+// PUT /admin/categories/:id/discount
+//
+//	{
+//	  "discountPercentage": 20,
+//	  "discountStartDate": "2025-10-01T00:00:00Z",
+//	  "discountEndDate": "2025-10-31T23:59:59Z"
+//	}
+func (h *CategoryHandler) UpdateCategoryDiscount(c *fiber.Ctx) error {
+	ctx := c.Context()
+	id := c.Params("id")
+
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid category ID"})
+	}
+
+	var req models.CategoryDiscountRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid request body", "error": err.Error()})
+	}
+
+	// Build update document
+	update := bson.M{
+		"$set": bson.M{
+			"updated_at": time.Now(),
+		},
+	}
+	setFields := update["$set"].(bson.M)
+
+	if req.DiscountPercentage != nil {
+		setFields["discount_percentage"] = req.DiscountPercentage
+	}
+	if req.DiscountAmount != nil {
+		setFields["discount_amount"] = req.DiscountAmount
+	}
+	if req.DiscountStartDate != nil {
+		setFields["discount_start_date"] = req.DiscountStartDate
+	}
+	if req.DiscountEndDate != nil {
+		setFields["discount_end_date"] = req.DiscountEndDate
+	}
+
+	collection := h.DB.Collections().Categories
+	result, err := collection.UpdateOne(ctx, bson.M{"_id": objectID}, update)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "Failed to update discount", "error": err.Error()})
+	}
+
+	if result.MatchedCount == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"success": false, "message": "Category not found"})
+	}
+
+	return c.JSON(fiber.Map{"success": true, "message": "Category discount updated successfully"})
+}
+
+// UpdateSubcategoryDiscount updates discount settings for a subcategory
+// @example Request:
+// PUT /admin/categories/:id/subcategories/:subId/discount
+//
+//	{
+//	  "discountPercentage": 15,
+//	  "discountStartDate": "2025-10-01T00:00:00Z",
+//	  "discountEndDate": "2025-10-31T23:59:59Z"
+//	}
+func (h *CategoryHandler) UpdateSubcategoryDiscount(c *fiber.Ctx) error {
+	ctx := c.Context()
+	id := c.Params("id")
+	subID := c.Params("subId")
+
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid category ID"})
+	}
+
+	subObjectID, err := primitive.ObjectIDFromHex(subID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid subcategory ID"})
+	}
+
+	var req models.SubcategoryDiscountRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid request body", "error": err.Error()})
+	}
+
+	// Build update document for specific subcategory
+	update := bson.M{
+		"$set": bson.M{
+			"updated_at": time.Now(),
+		},
+	}
+	setFields := update["$set"].(bson.M)
+
+	if req.DiscountPercentage != nil {
+		setFields["subcategories.$[elem].discount_percentage"] = req.DiscountPercentage
+	}
+	if req.DiscountAmount != nil {
+		setFields["subcategories.$[elem].discount_amount"] = req.DiscountAmount
+	}
+	if req.DiscountStartDate != nil {
+		setFields["subcategories.$[elem].discount_start_date"] = req.DiscountStartDate
+	}
+	if req.DiscountEndDate != nil {
+		setFields["subcategories.$[elem].discount_end_date"] = req.DiscountEndDate
+	}
+
+	arrayFilters := options.ArrayFilters{
+		Filters: []interface{}{bson.M{"elem._id": subObjectID}},
+	}
+	opts := options.Update().SetArrayFilters(arrayFilters)
+
+	collection := h.DB.Collections().Categories
+	result, err := collection.UpdateOne(ctx, bson.M{"_id": objectID}, update, opts)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "Failed to update subcategory discount", "error": err.Error()})
+	}
+
+	if result.MatchedCount == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"success": false, "message": "Category or subcategory not found"})
+	}
+
+	return c.JSON(fiber.Map{"success": true, "message": "Subcategory discount updated successfully"})
+}
