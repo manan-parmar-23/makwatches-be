@@ -126,6 +126,22 @@ quick-update:
 	@echo "Quick environment update..."
 	./quick-env-update.sh
 
+# Update production environment variables
+update-prod-env:
+	@echo "Updating production environment..."
+	./update-production-env.sh
+	@echo ""
+	@echo "To apply changes, run: make deploy-prod"
+
+# Deploy to production with updated environment
+deploy-prod:
+	@echo "Deploying to production..."
+	cd /opt/makwatches-be && docker compose pull && docker compose down && docker compose up -d
+	@echo ""
+	@echo "Deployment complete! Checking status..."
+	@sleep 5
+	@docker ps | grep makwatches
+
 # Quick start
 quickstart:
 	@echo "Running quick start..."
@@ -184,6 +200,8 @@ help:
 	@echo "  make update-env      - Update environment and redeploy"
 	@echo "  make update-env-commit - Update environment, commit, and redeploy"
 	@echo "  make quick-update    - Quick environment update (no backup/commit)"
+	@echo "  make update-prod-env - Update production environment variables"
+	@echo "  make deploy-prod     - Deploy to production with updated environment"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make init            - Initialize project (first time setup)"
