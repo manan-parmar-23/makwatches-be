@@ -36,6 +36,8 @@ func (h *CartHandler) AddToCart(c *fiber.Ctx) error {
 	// Get user info from the token
 	userLocals := c.Locals("user")
 	if userLocals == nil {
+		fmt.Printf("[CART] AddToCart - user locals is nil, Path: %s, Method: %s, IP: %s\n", 
+			c.Path(), c.Method(), c.IP())
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
 			"message": "Unauthorized - User data not found in context",
@@ -44,11 +46,14 @@ func (h *CartHandler) AddToCart(c *fiber.Ctx) error {
 
 	user, ok := userLocals.(*middleware.TokenMetadata)
 	if !ok || user == nil {
+		fmt.Printf("[CART] AddToCart - user type assertion failed or user is nil, Path: %s\n", c.Path())
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
 			"message": "Unauthorized - Invalid user data format",
 		})
 	}
+
+	fmt.Printf("[CART] AddToCart - User authenticated: %s\n", user.UserID.Hex())
 
 	// Parse request body
 	var req models.CartItemRequest
