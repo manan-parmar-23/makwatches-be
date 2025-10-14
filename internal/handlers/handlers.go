@@ -163,6 +163,9 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	adminCategories.Patch("/:categoryId/subcategories/:subId", categoryHandler.UpdateSubcategoryName)
 	adminCategories.Delete("/:id", categoryHandler.DeleteCategory)
 	adminCategories.Delete("/:categoryId/subcategories/:subId", categoryHandler.DeleteSubcategory)
+	// Discount routes for categories
+	adminCategories.Put("/:id/discount", categoryHandler.UpdateCategoryDiscount)
+	adminCategories.Put("/:id/subcategories/:subId/discount", categoryHandler.UpdateSubcategoryDiscount)
 	adminOrders := orders.Group("/", middleware.Role("admin"))
 	adminOrders.Patch("/:orderID/status", orderHandler.UpdateOrderStatus)
 

@@ -34,11 +34,19 @@ func (h *CartHandler) AddToCart(c *fiber.Ctx) error {
 	ctx := c.Context()
 
 	// Get user info from the token
-	user, ok := c.Locals("user").(*middleware.TokenMetadata)
-	if !ok {
+	userLocals := c.Locals("user")
+	if userLocals == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
-			"message": "Unauthorized - User data not found",
+			"message": "Unauthorized - User data not found in context",
+		})
+	}
+
+	user, ok := userLocals.(*middleware.TokenMetadata)
+	if !ok || user == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "Unauthorized - Invalid user data format",
 		})
 	}
 
