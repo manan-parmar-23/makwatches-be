@@ -35,7 +35,7 @@ func (h *CartHandler) AddToCart(c *fiber.Ctx) error {
 
 	// Get user info from the token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
-	if !ok {
+	if !ok || user == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
 			"message": "Unauthorized - User data not found",
@@ -188,7 +188,7 @@ func (h *CartHandler) GetCart(c *fiber.Ctx) error {
 	} else {
 		// Get user info from token
 		user, ok := c.Locals("user").(*middleware.TokenMetadata)
-		if !ok {
+		if !ok || user == nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"success": false,
 				"message": "Unauthorized - User data not found",
@@ -315,7 +315,7 @@ func (h *CartHandler) RemoveFromCart(c *fiber.Ctx) error {
 
 	// Check if the user is authorized to remove this item
 	tokenUser, ok := c.Locals("user").(*middleware.TokenMetadata)
-	if !ok || (tokenUser.UserID != userID && tokenUser.Role != "admin") {
+	if !ok || tokenUser == nil || (tokenUser.UserID != userID && tokenUser.Role != "admin") {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"success": false,
 			"message": "Not authorized to modify this cart",

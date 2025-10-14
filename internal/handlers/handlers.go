@@ -96,8 +96,8 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	// User "me" endpoint
 	api.Get("/me", authHandler.Me)
 
-	// Cart routes
-	cart := api.Group("/cart")
+	// Cart routes (protected with authentication)
+	cart := api.Group("/cart", middleware.Auth(cfg.JWTSecret))
 	cart.Post("/", cartHandler.AddToCart)
 	cart.Get("/:userID", cartHandler.GetCart)
 	cart.Delete("/:userID/:productID", cartHandler.RemoveFromCart)
