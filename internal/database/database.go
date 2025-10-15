@@ -85,6 +85,11 @@ func (db *DBClient) Collections() struct {
 
 // CacheGet retrieves data from Redis cache
 func (db *DBClient) CacheGet(ctx context.Context, key string, dest interface{}) error {
+	// Check if Redis is available
+	if db.Redis == nil {
+		return errors.New("redis not available")
+	}
+	
 	val, err := db.Redis.Get(ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -98,6 +103,11 @@ func (db *DBClient) CacheGet(ctx context.Context, key string, dest interface{}) 
 
 // CacheSet stores data in Redis cache
 func (db *DBClient) CacheSet(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+	// Check if Redis is available
+	if db.Redis == nil {
+		return nil // Silently skip if Redis is not available
+	}
+	
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -108,6 +118,11 @@ func (db *DBClient) CacheSet(ctx context.Context, key string, value interface{},
 
 // CacheDel deletes data from Redis cache
 func (db *DBClient) CacheDel(ctx context.Context, keys ...string) error {
+	// Check if Redis is available
+	if db.Redis == nil {
+		return nil // Silently skip if Redis is not available
+	}
+	
 	return db.Redis.Del(ctx, keys...).Err()
 }
 

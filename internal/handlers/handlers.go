@@ -90,7 +90,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	// User "me" endpoint
 	api.Get("/me", authHandler.Me)
 
-	// Cart routes
+	// Cart routes (already protected by api group)
 	cart := api.Group("/cart")
 	cart.Post("/", cartHandler.AddToCart)
 	cart.Get("/:userID", cartHandler.GetCart)

@@ -22,6 +22,9 @@ func Auth(jwtSecret string) fiber.Handler {
     return func(c *fiber.Ctx) error {
         tokenHeader := c.Get("Authorization")
         if tokenHeader == "" {
+            // Log the request details for debugging
+            fmt.Printf("[AUTH] Missing Authorization header - Method: %s, Path: %s, IP: %s\n", 
+                c.Method(), c.Path(), c.IP())
             return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
                 "success": false,
                 "message": "Authorization header is required",
@@ -118,6 +121,10 @@ func Auth(jwtSecret string) fiber.Handler {
             Role:   role,
             Exp:    expTime,
         })
+
+        // Log successful authentication
+        fmt.Printf("[AUTH] User authenticated - UserID: %s, Role: %s, Path: %s\n", 
+            userID.Hex(), role, c.Path())
 
         return c.Next()
     }
