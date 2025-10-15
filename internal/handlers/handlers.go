@@ -58,6 +58,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	catalog := app.Group("/catalog")
 	catalog.Get("/products", productHandler.GetPublicProducts)
 	catalog.Get("/products/:id", productHandler.GetPublicProductByID)
+	catalog.Get("/filters", productHandler.GetCatalogFilters)
 
 	// Public category routes (no auth) - read-only for storefront
 	app.Get("/categories", categoryHandler.GetPublicCategories)

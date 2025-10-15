@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/shivam-mishra-20/mak-watches-be/internal/config"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/database"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/middleware"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/models"
 )
 
 // PaymentHandler provides endpoints for initiating payments (Razorpay order creation)
@@ -51,17 +53,16 @@ func (h *PaymentHandler) cartTotalINR(userID any) (float64, error) {
 	}
 	total := 0.0
 	for _, r := range rows {
-		var p struct {
-			Price float64 `bson:"price"`
-			Stock int     `bson:"stock"`
-		}
+		var p models.Product
 		if err := prodCol.FindOne(ctx, bson.M{"_id": r.ProductID}).Decode(&p); err != nil {
 			return 0, err
 		}
 		if p.Stock < r.Quantity {
 			return 0, fmt.Errorf("insufficient stock for a product")
 		}
-		total += p.Price * float64(r.Quantity)
+		// Use discounted final price if active
+		unit := p.GetFinalPrice()
+		total += unit * float64(r.Quantity)
 	}
 	return total, nil
 }
@@ -84,7 +85,7 @@ func (h *PaymentHandler) CreateRazorpayOrder(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Cart empty"})
 	}
 
-	amountPaise := int64(total * 100)
+	amountPaise := int64(math.Round(total * 100))
 	rnd := make([]byte, 6)
 	rand.Read(rnd)
 	receipt := fmt.Sprintf("rcpt_%s", hex.EncodeToString(rnd))

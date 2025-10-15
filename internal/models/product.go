@@ -19,6 +19,15 @@ type Product struct {
 	ImageURL     string             `json:"imageUrl" bson:"image_url"` // Main image (legacy support)
 	Images       []string           `json:"images" bson:"images"`      // Multiple S3 image URLs
 	Stock        int                `json:"stock" bson:"stock"`
+	// Optional filterable attributes (for dynamic filters)
+	Gender        string `json:"gender,omitempty" bson:"gender,omitempty"`
+	DialColor     string `json:"dialColor,omitempty" bson:"dial_color,omitempty"`
+	DialShape     string `json:"dialShape,omitempty" bson:"dial_shape,omitempty"`
+	DialType      string `json:"dialType,omitempty" bson:"dial_type,omitempty"`
+	StrapColor    string `json:"strapColor,omitempty" bson:"strap_color,omitempty"`
+	StrapMaterial string `json:"strapMaterial,omitempty" bson:"strap_material,omitempty"`
+	Style         string `json:"style,omitempty" bson:"style,omitempty"`
+	DialThickness string `json:"dialThickness,omitempty" bson:"dial_thickness,omitempty"`
 	// Discount fields (optional)
 	DiscountPercentage *float64   `json:"discountPercentage,omitempty" bson:"discount_percentage,omitempty"` // Percentage discount (0-100)
 	DiscountAmount     *float64   `json:"discountAmount,omitempty" bson:"discount_amount,omitempty"`         // Fixed amount discount

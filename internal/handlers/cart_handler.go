@@ -266,7 +266,8 @@ func (h *CartHandler) GetCart(c *fiber.Ctx) error {
 		err := productCollection.FindOne(ctx, bson.M{"_id": item.ProductID}).Decode(&product)
 		if err == nil {
 			cartItems[i].Product = &product
-			total += product.Price * float64(item.Quantity)
+			// Use discounted price if active
+			total += product.GetFinalPrice() * float64(item.Quantity)
 		}
 	}
 
