@@ -129,14 +129,16 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 			})
 		}
 
+		// Use discounted price if active
+		finalPrice := product.GetFinalPrice()
 		// Create order item
 		orderItem := models.OrderItem{
 			ProductID:   product.ID,
 			ProductName: product.Name,
-			Price:       product.Price,
+			Price:       finalPrice,
 			Size:        item.Size,
 			Quantity:    item.Quantity,
-			Subtotal:    product.Price * float64(item.Quantity),
+			Subtotal:    finalPrice * float64(item.Quantity),
 		}
 
 		orderItems = append(orderItems, orderItem)

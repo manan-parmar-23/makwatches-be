@@ -412,7 +412,21 @@ func (h *ProductHandler) UpdateProduct(c *fiber.Ctx) error {
 			"image_url":     updatedProduct.ImageURL,
 			"images":        updatedProduct.Images,
 			"stock":         updatedProduct.Stock,
-			"updated_at":    updatedProduct.UpdatedAt,
+			// filterable attributes
+			"gender":         updatedProduct.Gender,
+			"dial_color":     updatedProduct.DialColor,
+			"dial_shape":     updatedProduct.DialShape,
+			"dial_type":      updatedProduct.DialType,
+			"strap_color":    updatedProduct.StrapColor,
+			"strap_material": updatedProduct.StrapMaterial,
+			"style":          updatedProduct.Style,
+			"dial_thickness": updatedProduct.DialThickness,
+			// Discount fields (optional)
+			"discount_percentage": updatedProduct.DiscountPercentage,
+			"discount_amount":     updatedProduct.DiscountAmount,
+			"discount_start_date": updatedProduct.DiscountStartDate,
+			"discount_end_date":   updatedProduct.DiscountEndDate,
+			"updated_at":          updatedProduct.UpdatedAt,
 		},
 	}
 

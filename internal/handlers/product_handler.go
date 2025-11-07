@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -245,6 +246,21 @@ func (h *ProductHandler) GetPublicProducts(c *fiber.Ctx) error {
 	category := c.Query("category")
 	mainCategory := c.Query("mainCategory")
 	subcategory := c.Query("subcategory")
+	// Dynamic filter params
+	brandParam := c.Query("brand") // comma-separated or single
+	gender := c.Query("gender")
+	dialColor := c.Query("dialColor")
+	dialShape := c.Query("dialShape")
+	dialType := c.Query("dialType")
+	strapColor := c.Query("strapColor")
+	strapMaterial := c.Query("strapMaterial")
+	style := c.Query("style")
+	dialThickness := c.Query("dialThickness")
+	minPriceStr := c.Query("minPrice")
+	maxPriceStr := c.Query("maxPrice")
+	inStockStr := c.Query("inStock")
+	sortBy := c.Query("sortBy", "createdAt")
+	order := c.Query("order", "desc")
 	pageStr := c.Query("page", "1")
 	limitStr := c.Query("limit", "12")
 
@@ -266,14 +282,83 @@ func (h *ProductHandler) GetPublicProducts(c *fiber.Ctx) error {
 		filter["category"] = bson.M{"$regex": fmt.Sprintf("^%s", mainCategory)}
 	}
 
+	// Apply dynamic attribute filters
+	if brandParam != "" {
+		// split by comma and trim
+		parts := []string{}
+		for _, b := range strings.Split(brandParam, ",") {
+			if s := strings.TrimSpace(b); s != "" {
+				parts = append(parts, s)
+			}
+		}
+		if len(parts) == 1 {
+			filter["brand"] = parts[0]
+		} else if len(parts) > 1 {
+			filter["brand"] = bson.M{"$in": parts}
+		}
+	}
+	if gender != "" {
+		filter["gender"] = gender
+	}
+	if dialColor != "" {
+		filter["dial_color"] = dialColor
+	}
+	if dialShape != "" {
+		filter["dial_shape"] = dialShape
+	}
+	if dialType != "" {
+		filter["dial_type"] = dialType
+	}
+	if strapColor != "" {
+		filter["strap_color"] = strapColor
+	}
+	if strapMaterial != "" {
+		filter["strap_material"] = strapMaterial
+	}
+	if style != "" {
+		filter["style"] = style
+	}
+	if dialThickness != "" {
+		filter["dial_thickness"] = dialThickness
+	}
+	if inStockStr != "" {
+		if inStockStr == "1" || strings.EqualFold(inStockStr, "true") {
+			filter["stock"] = bson.M{"$gt": 0}
+		}
+	}
+	if minPriceStr != "" {
+		if v, err := strconv.ParseFloat(minPriceStr, 64); err == nil {
+			filter["price"] = bson.M{"$gte": v}
+		}
+	}
+	if maxPriceStr != "" {
+		if v, err := strconv.ParseFloat(maxPriceStr, 64); err == nil {
+			if m, ok := filter["price"].(bson.M); ok {
+				m["$lte"] = v
+			} else {
+				filter["price"] = bson.M{"$lte": v}
+			}
+		}
+	}
+
 	collection := h.DB.Collections().Products
 
 	// Simple pagination without caching (could add later)
 	findOptions := options.Find()
 	findOptions.SetSkip(int64((page - 1) * limit))
 	findOptions.SetLimit(int64(limit))
-	findOptions.SetSort(bson.D{{Key: "createdAt", Value: -1}})
-	// Projection to reduce payload
+	// Determine sort
+	sortField := sortBy
+	if sortField == "createdAt" || sortField == "price" || sortField == "stock" {
+		dir := -1
+		if strings.EqualFold(order, "asc") {
+			dir = 1
+		}
+		findOptions.SetSort(bson.D{{Key: sortField, Value: dir}})
+	} else {
+		findOptions.SetSort(bson.D{{Key: "createdAt", Value: -1}})
+	}
+	// Projection to reduce payload (but include discount fields)
 	findOptions.SetProjection(bson.M{
 		"name":         1,
 		"price":        1,
@@ -283,6 +368,11 @@ func (h *ProductHandler) GetPublicProducts(c *fiber.Ctx) error {
 		"brand":        1,
 		"mainCategory": 1,
 		"subcategory":  1,
+		// discount fields
+		"discount_percentage": 1,
+		"discount_amount":     1,
+		"discount_start_date": 1,
+		"discount_end_date":   1,
 	})
 
 	total, err := collection.CountDocuments(ctx, filter)
@@ -306,6 +396,11 @@ func (h *ProductHandler) GetPublicProducts(c *fiber.Ctx) error {
 		Brand        string             `json:"brand,omitempty"`
 		MainCategory string             `json:"mainCategory,omitempty"`
 		Subcategory  string             `json:"subcategory,omitempty"`
+		// discount fields
+		DiscountPercentage *float64   `bson:"discount_percentage,omitempty" json:"discountPercentage,omitempty"`
+		DiscountAmount     *float64   `bson:"discount_amount,omitempty" json:"discountAmount,omitempty"`
+		DiscountStartDate  *time.Time `bson:"discount_start_date,omitempty" json:"discountStartDate,omitempty"`
+		DiscountEndDate    *time.Time `bson:"discount_end_date,omitempty" json:"discountEndDate,omitempty"`
 	}
 
 	var items []PublicProduct
@@ -348,9 +443,15 @@ func (h *ProductHandler) GetPublicProductByID(c *fiber.Ctx) error {
 		Brand        string             `json:"brand,omitempty"`
 		MainCategory string             `json:"mainCategory,omitempty"`
 		Subcategory  string             `json:"subcategory,omitempty"`
+		// discount fields
+		DiscountPercentage *float64   `bson:"discount_percentage,omitempty" json:"discountPercentage,omitempty"`
+		DiscountAmount     *float64   `bson:"discount_amount,omitempty" json:"discountAmount,omitempty"`
+		DiscountStartDate  *time.Time `bson:"discount_start_date,omitempty" json:"discountStartDate,omitempty"`
+		DiscountEndDate    *time.Time `bson:"discount_end_date,omitempty" json:"discountEndDate,omitempty"`
 	}
 	err = collection.FindOne(c.Context(), bson.M{"_id": objID}, options.FindOne().SetProjection(bson.M{
 		"name": 1, "price": 1, "images": 1, "category": 1, "stock": 1, "brand": 1, "mainCategory": 1, "subcategory": 1, "description": 1,
+		"discount_percentage": 1, "discount_amount": 1, "discount_start_date": 1, "discount_end_date": 1,
 	})).Decode(&doc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -359,4 +460,151 @@ func (h *ProductHandler) GetPublicProductByID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "Failed to fetch product", "error": err.Error()})
 	}
 	return c.JSON(fiber.Map{"success": true, "message": "Product retrieved successfully", "data": doc})
+}
+
+// GetCatalogFilters returns dynamic filter options based on current products and optional category scope
+// GET /catalog/filters?mainCategory=Men&category=Men&subcategory=Chronograph
+func (h *ProductHandler) GetCatalogFilters(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	mainCategory := c.Query("mainCategory")
+	category := c.Query("category")
+	subcategory := c.Query("subcategory")
+
+	filter := bson.M{}
+	if category != "" {
+		filter["category"] = category
+	} else if mainCategory != "" && subcategory != "" {
+		filter["category"] = mainCategory + "/" + subcategory
+	} else if mainCategory != "" {
+		filter["category"] = bson.M{"$regex": fmt.Sprintf("^%s", mainCategory)}
+	}
+
+	// Only project fields needed for filters
+	proj := bson.M{
+		"brand":          1,
+		"gender":         1,
+		"dial_color":     1,
+		"dial_shape":     1,
+		"dial_type":      1,
+		"strap_color":    1,
+		"strap_material": 1,
+		"style":          1,
+		"dial_thickness": 1,
+		"price":          1,
+		"stock":          1,
+	}
+
+	coll := h.DB.Collections().Products
+	cur, err := coll.Find(ctx, filter, options.Find().SetProjection(proj))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "Failed to fetch filters", "error": err.Error()})
+	}
+	defer cur.Close(ctx)
+
+	type row struct {
+		Brand         string  `bson:"brand"`
+		Gender        string  `bson:"gender"`
+		DialColor     string  `bson:"dial_color"`
+		DialShape     string  `bson:"dial_shape"`
+		DialType      string  `bson:"dial_type"`
+		StrapColor    string  `bson:"strap_color"`
+		StrapMaterial string  `bson:"strap_material"`
+		Style         string  `bson:"style"`
+		DialThickness string  `bson:"dial_thickness"`
+		Price         float64 `bson:"price"`
+		Stock         int     `bson:"stock"`
+	}
+
+	var items []row
+	if err := cur.All(ctx, &items); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "Failed to decode filters", "error": err.Error()})
+	}
+
+	// Build unique sets
+	uniq := func() map[string]struct{} { return map[string]struct{}{} }
+	brands := uniq()
+	genders := uniq()
+	dialColors := uniq()
+	dialShapes := uniq()
+	dialTypes := uniq()
+	strapColors := uniq()
+	strapMaterials := uniq()
+	styles := uniq()
+	dialThicknesses := uniq()
+
+	var minPrice, maxPrice float64
+	var havePrice bool
+	inStock := false
+
+	for _, it := range items {
+		if it.Brand != "" {
+			brands[it.Brand] = struct{}{}
+		}
+		if it.Gender != "" {
+			genders[it.Gender] = struct{}{}
+		}
+		if it.DialColor != "" {
+			dialColors[it.DialColor] = struct{}{}
+		}
+		if it.DialShape != "" {
+			dialShapes[it.DialShape] = struct{}{}
+		}
+		if it.DialType != "" {
+			dialTypes[it.DialType] = struct{}{}
+		}
+		if it.StrapColor != "" {
+			strapColors[it.StrapColor] = struct{}{}
+		}
+		if it.StrapMaterial != "" {
+			strapMaterials[it.StrapMaterial] = struct{}{}
+		}
+		if it.Style != "" {
+			styles[it.Style] = struct{}{}
+		}
+		if it.DialThickness != "" {
+			dialThicknesses[it.DialThickness] = struct{}{}
+		}
+		if !havePrice {
+			minPrice, maxPrice, havePrice = it.Price, it.Price, true
+		} else {
+			if it.Price < minPrice {
+				minPrice = it.Price
+			}
+			if it.Price > maxPrice {
+				maxPrice = it.Price
+			}
+		}
+		if it.Stock > 0 {
+			inStock = true
+		}
+	}
+
+	// Convert sets to arrays (sorted optional)
+	toList := func(m map[string]struct{}) []string {
+		out := make([]string, 0, len(m))
+		for k := range m {
+			out = append(out, k)
+		}
+		return out
+	}
+
+	return c.JSON(fiber.Map{
+		"success": true,
+		"message": "Filters retrieved",
+		"data": fiber.Map{
+			"brands":          toList(brands),
+			"genders":         toList(genders),
+			"dialColors":      toList(dialColors),
+			"dialShapes":      toList(dialShapes),
+			"dialTypes":       toList(dialTypes),
+			"strapColors":     toList(strapColors),
+			"strapMaterials":  toList(strapMaterials),
+			"styles":          toList(styles),
+			"dialThicknesses": toList(dialThicknesses),
+			"minPrice":        minPrice,
+			"maxPrice":        maxPrice,
+			"hasStock":        inStock,
+		},
+	})
 }
