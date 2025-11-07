@@ -22,6 +22,10 @@
 *.env
 !example.env
 
+# Backup files
+*.backup.*
+docker-compose.prod.yml.backup.*
+
 # Credentials and secrets
 googleCreds.json
 firebase-credentials.json

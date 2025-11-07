@@ -1,0 +1,75 @@
+╔═══════════════════════════════════════════════════════════════╗
+║                                                               ║
+║   🚀 ONE-COMMAND DEPLOYMENT - QUICK START                    ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+📝 WHEN YOU NEED TO UPDATE ENVIRONMENT VARIABLES:
+
+1. Edit .env file:
+   nano .env
+
+2. Run ONE command:
+   make deploy-all
+
+   That's it! ✨
+
+╔═══════════════════════════════════════════════════════════════╗
+║  What happens automatically:                                  ║
+╠═══════════════════════════════════════════════════════════════╣
+║  ✅ Syncs ALL .env variables to docker-compose.prod.yml      ║
+║  ✅ Updates production environment (/opt/makwatches-be)      ║
+║  ✅ Commits changes to git                                    ║
+║  ✅ Pushes to GitHub (triggers CI/CD)                         ║
+║  ✅ Waits for CI/CD to build                                  ║
+║  ✅ Redeploys application                                     ║
+║  ✅ Verifies deployment                                       ║
+╚═══════════════════════════════════════════════════════════════╝
+
+📋 AVAILABLE COMMANDS:
+
+  make deploy-all      👈 USE THIS! One command for everything
+  make sync-env        → Just sync .env to docker-compose
+  make update-prod-env → Just update production .env
+  make deploy-prod     → Just redeploy containers
+
+💡 EXAMPLES:
+
+Adding a new API key:
+  $ echo "NEW_API_KEY=abc123" >> .env
+  $ make deploy-all
+  ✅ Done!
+
+Updating MongoDB URI:
+  $ nano .env  # Edit MONGO_URI
+  $ make deploy-all
+  ✅ Done!
+
+Adding Stripe integration:
+  $ echo "STRIPE_KEY=sk_live_xxx" >> .env
+  $ echo "STRIPE_SECRET=sk_secret_xxx" >> .env
+  $ make deploy-all
+  ✅ Done! Both variables automatically available in container
+
+📚 DETAILED GUIDES:
+
+  DYNAMIC_ENV_GUIDE.md    - Complete environment management guide
+  ENV_MANAGEMENT.md       - Environment variable reference
+  QUICKSTART.md           - General quickstart guide
+
+🔍 VERIFY DEPLOYMENT:
+
+  docker ps | grep makwatches              - Check container status
+  docker logs makwatches-be-api --tail=50  - View application logs
+  curl http://localhost:8080/health        - Test health endpoint
+
+⚠️  IMPORTANT:
+
+  - Never commit .env to git (it's in .gitignore)
+  - Always test in development before production
+  - The .env file is the SINGLE SOURCE OF TRUTH
+  - docker-compose.prod.yml is AUTO-GENERATED, don't edit manually
+
+╔═══════════════════════════════════════════════════════════════╗
+║  Questions? Check DYNAMIC_ENV_GUIDE.md for full details      ║
+╚═══════════════════════════════════════════════════════════════╝

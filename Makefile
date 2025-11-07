@@ -133,6 +133,16 @@ update-prod-env:
 	@echo ""
 	@echo "To apply changes, run: make deploy-prod"
 
+# Sync environment variables to docker-compose
+sync-env:
+	@echo "Syncing environment variables to docker-compose.prod.yml..."
+	./sync-env-to-compose.sh
+
+# One-command deployment (sync env, commit, push, deploy)
+deploy-all:
+	@echo "Running full deployment pipeline..."
+	./deploy-with-env.sh
+
 # Deploy to production with updated environment
 deploy-prod:
 	@echo "Deploying to production..."
@@ -201,6 +211,8 @@ help:
 	@echo "  make update-env-commit - Update environment, commit, and redeploy"
 	@echo "  make quick-update    - Quick environment update (no backup/commit)"
 	@echo "  make update-prod-env - Update production environment variables"
+	@echo "  make sync-env        - Sync all env variables to docker-compose.prod.yml"
+	@echo "  make deploy-all      - Full pipeline: sync, commit, push, deploy (ONE COMMAND!)"
 	@echo "  make deploy-prod     - Deploy to production with updated environment"
 	@echo ""
 	@echo "Utilities:"
