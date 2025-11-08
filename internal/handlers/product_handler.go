@@ -421,7 +421,7 @@ func (h *ProductHandler) GetPublicProducts(c *fiber.Ctx) error {
 	})
 }
 
-// GetPublicProductByID returns reduced product info for storefront
+// GetPublicProductByID returns complete product info for storefront
 // GET /catalog/products/:id
 func (h *ProductHandler) GetPublicProductByID(c *fiber.Ctx) error {
 	id := c.Params("id")
@@ -435,23 +435,59 @@ func (h *ProductHandler) GetPublicProductByID(c *fiber.Ctx) error {
 	collection := h.DB.Collections().Products
 	var doc struct {
 		ID           primitive.ObjectID `bson:"_id" json:"id"`
-		Name         string             `json:"name"`
-		Price        float64            `json:"price"`
-		Images       []string           `json:"images"`
-		Category     string             `json:"category"`
-		Stock        int                `json:"stock"`
-		Brand        string             `json:"brand,omitempty"`
-		MainCategory string             `json:"mainCategory,omitempty"`
-		Subcategory  string             `json:"subcategory,omitempty"`
-		// discount fields
+		Name         string             `bson:"name" json:"name"`
+		Brand        string             `bson:"brand,omitempty" json:"brand,omitempty"`
+		Description  string             `bson:"description" json:"description"`
+		Price        float64            `bson:"price" json:"price"`
+		Category     string             `bson:"category" json:"category"`
+		MainCategory string             `bson:"main_category,omitempty" json:"mainCategory,omitempty"`
+		Subcategory  string             `bson:"subcategory,omitempty" json:"subcategory,omitempty"`
+		ImageURL     string             `bson:"image_url,omitempty" json:"imageUrl,omitempty"`
+		Images       []string           `bson:"images" json:"images"`
+		Stock        int                `bson:"stock" json:"stock"`
+		// Optional filterable attributes
+		Gender        string `bson:"gender,omitempty" json:"gender,omitempty"`
+		DialColor     string `bson:"dial_color,omitempty" json:"dialColor,omitempty"`
+		DialShape     string `bson:"dial_shape,omitempty" json:"dialShape,omitempty"`
+		DialType      string `bson:"dial_type,omitempty" json:"dialType,omitempty"`
+		StrapColor    string `bson:"strap_color,omitempty" json:"strapColor,omitempty"`
+		StrapMaterial string `bson:"strap_material,omitempty" json:"strapMaterial,omitempty"`
+		Style         string `bson:"style,omitempty" json:"style,omitempty"`
+		DialThickness string `bson:"dial_thickness,omitempty" json:"dialThickness,omitempty"`
+		// Discount fields
 		DiscountPercentage *float64   `bson:"discount_percentage,omitempty" json:"discountPercentage,omitempty"`
 		DiscountAmount     *float64   `bson:"discount_amount,omitempty" json:"discountAmount,omitempty"`
 		DiscountStartDate  *time.Time `bson:"discount_start_date,omitempty" json:"discountStartDate,omitempty"`
 		DiscountEndDate    *time.Time `bson:"discount_end_date,omitempty" json:"discountEndDate,omitempty"`
+		// Timestamps
+		CreatedAt time.Time `bson:"created_at" json:"createdAt"`
+		UpdatedAt time.Time `bson:"updated_at" json:"updatedAt"`
 	}
 	err = collection.FindOne(c.Context(), bson.M{"_id": objID}, options.FindOne().SetProjection(bson.M{
-		"name": 1, "price": 1, "images": 1, "category": 1, "stock": 1, "brand": 1, "mainCategory": 1, "subcategory": 1, "description": 1,
-		"discount_percentage": 1, "discount_amount": 1, "discount_start_date": 1, "discount_end_date": 1,
+		"name":                1,
+		"brand":               1,
+		"description":         1,
+		"price":               1,
+		"category":            1,
+		"main_category":       1,
+		"subcategory":         1,
+		"image_url":           1,
+		"images":              1,
+		"stock":               1,
+		"gender":              1,
+		"dial_color":          1,
+		"dial_shape":          1,
+		"dial_type":           1,
+		"strap_color":         1,
+		"strap_material":      1,
+		"style":               1,
+		"dial_thickness":      1,
+		"discount_percentage": 1,
+		"discount_amount":     1,
+		"discount_start_date": 1,
+		"discount_end_date":   1,
+		"created_at":          1,
+		"updated_at":          1,
 	})).Decode(&doc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
