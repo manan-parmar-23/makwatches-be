@@ -18,7 +18,7 @@ jobs:
   build-and-test:
     name: Build and Test
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache: true
 
       - name: Install dependencies
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-test
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -101,7 +101,7 @@ jobs:
     needs: docker-build-push
     # Only deploy on main branch (server secrets will be validated in the step)
     if: github.ref == 'refs/heads/main'
-    
+
     steps:
       - name: Deploy to Server via SSH
         uses: appleboy/ssh-action@master
@@ -112,24 +112,37 @@ jobs:
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
             cd /opt/makwatches-be || exit 1
-            
-            # Pull latest image
-            docker pull ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-            
-            # Stop and remove old container
+
+            echo "🔄 Stopping existing containers..."
             docker compose down
-            
-            # Start new container
-            docker compose up -d
-            
-            # Clean up old images
+
+            echo "🗑️ Removing old image to force fresh pull..."
+            docker rmi ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest || true
+
+            echo "📥 Pulling latest image with no-cache..."
+            docker pull --no-cache ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+
+            echo "🚀 Starting new container with force recreate..."
+            docker compose up -d --force-recreate --pull always
+
+            echo "🧹 Cleaning up dangling images..."
             docker image prune -af
-            
-            # Check if container is healthy
-            sleep 10
-            docker ps | grep makwatches-be-api
+
+            echo "⏳ Waiting for container to be healthy..."
+            sleep 15
+
+            echo "🔍 Checking container status..."
+            if docker ps | grep -q makwatches-be-api; then
+              echo "✅ Container is running"
+              docker logs makwatches-be-api --tail=20
+            else
+              echo "❌ Container failed to start"
+              docker compose logs --tail=50
+              exit 1
+            fi
 
       - name: Verify Deployment
         run: |
-          echo "Deployment completed successfully!"
-          echo "Check the application at: ${{ secrets.APP_URL }}"
+          echo "✅ Deployment completed successfully!"
+          echo "📝 Commit SHA: ${{ github.sha }}"
+          echo "🏷️ Deployed at: $(date -u)"
