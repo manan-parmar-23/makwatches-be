@@ -143,6 +143,12 @@ func (h *HomeContentHandler) CreateHeroSlide(c *fiber.Ctx) error {
 		}
 	}
 
+	// Generate productId if not provided
+	if payload.ProductID == nil || payload.ProductID.IsZero() {
+		newProductID := primitive.NewObjectID()
+		payload.ProductID = &newProductID
+	}
+
 	res, err := coll.InsertOne(ctx, payload)
 	if err != nil {
 		return fiberError(c, err, "Failed to create hero slide")
@@ -177,6 +183,17 @@ func (h *HomeContentHandler) UpdateHeroSlide(c *fiber.Ctx) error {
 		return fiberBadRequest(c, err.Error(), err)
 	}
 
+	// First, fetch existing slide to check if productId exists
+	coll := h.DB.MongoDB.Collection(heroSlidesCollectionName)
+	var existing models.HeroSlide
+	err = coll.FindOne(ctx, bson.M{"_id": objectID}).Decode(&existing)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return fiberNotFound(c, "Hero slide not found")
+		}
+		return fiberError(c, err, "Failed to fetch existing hero slide")
+	}
+
 	update := bson.M{
 		"title":       payload.Title,
 		"subtitle":    payload.Subtitle,
@@ -192,7 +209,12 @@ func (h *HomeContentHandler) UpdateHeroSlide(c *fiber.Ctx) error {
 		update["position"] = payload.Position
 	}
 
-	coll := h.DB.MongoDB.Collection(heroSlidesCollectionName)
+	// Generate productId if it doesn't exist yet
+	if existing.ProductID == nil || existing.ProductID.IsZero() {
+		newProductID := primitive.NewObjectID()
+		update["productId"] = newProductID
+	}
+
 	result, err := coll.UpdateByID(ctx, objectID, bson.M{"$set": update})
 	if err != nil {
 		return fiberError(c, err, "Failed to update hero slide")
@@ -409,6 +431,12 @@ func (h *HomeContentHandler) CreateCollectionFeature(c *fiber.Ctx) error {
 		}
 	}
 
+	// Generate productId if not provided
+	if payload.ProductID == nil || payload.ProductID.IsZero() {
+		newProductID := primitive.NewObjectID()
+		payload.ProductID = &newProductID
+	}
+
 	res, err := coll.InsertOne(ctx, payload)
 	if err != nil {
 		return fiberError(c, err, "Failed to create collection feature")
@@ -441,6 +469,17 @@ func (h *HomeContentHandler) UpdateCollectionFeature(c *fiber.Ctx) error {
 		return fiberBadRequest(c, err.Error(), err)
 	}
 
+	// First, fetch existing feature to check if productId exists
+	coll := h.DB.MongoDB.Collection(collectionFeaturesCollectionName)
+	var existing models.HomeCollectionFeature
+	err = coll.FindOne(ctx, bson.M{"_id": objectID}).Decode(&existing)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return fiberNotFound(c, "Collection feature not found")
+		}
+		return fiberError(c, err, "Failed to fetch existing collection feature")
+	}
+
 	update := bson.M{
 		"tagline":      payload.Tagline,
 		"title":        payload.Title,
@@ -457,7 +496,12 @@ func (h *HomeContentHandler) UpdateCollectionFeature(c *fiber.Ctx) error {
 		update["position"] = payload.Position
 	}
 
-	coll := h.DB.MongoDB.Collection(collectionFeaturesCollectionName)
+	// Generate productId if it doesn't exist yet
+	if existing.ProductID == nil || existing.ProductID.IsZero() {
+		newProductID := primitive.NewObjectID()
+		update["productId"] = newProductID
+	}
+
 	res, err := coll.UpdateByID(ctx, objectID, bson.M{"$set": update})
 	if err != nil {
 		return fiberError(c, err, "Failed to update collection feature")
@@ -863,6 +907,7 @@ func (h *HomeContentHandler) fetchHeroSlides(ctx context.Context) ([]models.Hero
 	if err := cursor.All(ctx, &slides); err != nil {
 		return nil, err
 	}
+
 	return slides, nil
 }
 
@@ -1088,4 +1133,77 @@ func fiberNotFound(c *fiber.Ctx, message string) error {
 		"success": false,
 		"message": message,
 	})
+}
+
+// GetHomeContentByProductID retrieves hero slide or collection feature by productId
+// GET /home-content/product/:productId
+func (h *HomeContentHandler) GetHomeContentByProductID(c *fiber.Ctx) error {
+	ctx := c.Context()
+	productID := c.Params("productId")
+
+	if productID == "" {
+		return fiberBadRequest(c, "Product ID is required", nil)
+	}
+
+	objID, err := primitive.ObjectIDFromHex(productID)
+	if err != nil {
+		return fiberBadRequest(c, "Invalid product ID format", err)
+	}
+
+	// First, try to find in hero slides
+	heroCollection := h.DB.MongoDB.Collection(heroSlidesCollectionName)
+	var heroSlide models.HeroSlide
+	err = heroCollection.FindOne(ctx, bson.M{"productId": objID}).Decode(&heroSlide)
+	if err == nil {
+		// Found in hero slides, convert to product-like response
+		return c.JSON(fiber.Map{
+			"success": true,
+			"message": "Product details retrieved from hero content",
+			"data": fiber.Map{
+				"id":          heroSlide.ProductID.Hex(),
+				"name":        heroSlide.Title,
+				"description": heroSlide.Description,
+				"price":       heroSlide.Price,
+				"images":      []string{heroSlide.Image},
+				"imageUrl":    heroSlide.Image,
+				"subtitle":    heroSlide.Subtitle,
+				"features":    heroSlide.Features,
+				"source":      "hero_slide",
+				"sourceId":    heroSlide.ID.Hex(),
+			},
+		})
+	}
+
+	// If not found in hero slides, try collection features
+	collectionCollection := h.DB.MongoDB.Collection(collectionFeaturesCollectionName)
+	var collectionFeature models.HomeCollectionFeature
+	err = collectionCollection.FindOne(ctx, bson.M{"productId": objID}).Decode(&collectionFeature)
+	if err == nil {
+		// Found in collection features, convert to product-like response
+		// Parse price if available (may be string format like "₹3800")
+		var priceValue interface{} = 0
+		if collectionFeature.Price != "" {
+			priceValue = collectionFeature.Price
+		}
+
+		return c.JSON(fiber.Map{
+			"success": true,
+			"message": "Product details retrieved from collection content",
+			"data": fiber.Map{
+				"id":           collectionFeature.ProductID.Hex(),
+				"name":         collectionFeature.Title,
+				"description":  collectionFeature.Description,
+				"price":        priceValue,
+				"images":       []string{collectionFeature.Image},
+				"imageUrl":     collectionFeature.Image,
+				"tagline":      collectionFeature.Tagline,
+				"availability": collectionFeature.Availability,
+				"source":       "collection_feature",
+				"sourceId":     collectionFeature.ID.Hex(),
+			},
+		})
+	}
+
+	// Not found in either collection
+	return fiberNotFound(c, "Product not found in home content")
 }

@@ -36,7 +36,7 @@ func (h *CartHandler) AddToCart(c *fiber.Ctx) error {
 	// Get user info from the token
 	userLocals := c.Locals("user")
 	if userLocals == nil {
-		fmt.Printf("[CART] AddToCart - user locals is nil, Path: %s, Method: %s, IP: %s\n", 
+		fmt.Printf("[CART] AddToCart - user locals is nil, Path: %s, Method: %s, IP: %s\n",
 			c.Path(), c.Method(), c.IP())
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
@@ -83,30 +83,51 @@ func (h *CartHandler) AddToCart(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check if the product exists
-	var product models.Product
-	collection := h.DB.Collections().Products
-	err = collection.FindOne(ctx, bson.M{"_id": productID}).Decode(&product)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"success": false,
-				"message": "Product not found",
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "Failed to retrieve product",
-			"error":   err.Error(),
-		})
-	}
+	// First, try to find in home content (hero slides and collections) by productId
+	heroCollection := h.DB.MongoDB.Collection("hero_slides")
+	collectionCollection := h.DB.MongoDB.Collection("home_collection_features")
 
-	// Check if the product is in stock
-	if product.Stock < req.Quantity {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "Not enough stock available",
-		})
+	var heroSlide models.HeroSlide
+	err = heroCollection.FindOne(ctx, bson.M{"productId": productID}).Decode(&heroSlide)
+	if err == nil {
+		// Found in hero slides - home content products don't have stock limits
+		fmt.Printf("[CART] Product found in hero_slides: %s (productId: %s)\n", heroSlide.Title, productID.Hex())
+		// Product verification successful, continue to add to cart
+	} else {
+		// Try collection features
+		var collectionFeature models.HomeCollectionFeature
+		err = collectionCollection.FindOne(ctx, bson.M{"productId": productID}).Decode(&collectionFeature)
+		if err == nil {
+			fmt.Printf("[CART] Product found in home_collection_features: %s (productId: %s)\n", collectionFeature.Title, productID.Hex())
+			// Product verification successful, continue to add to cart
+		} else {
+			// Not found in home content, try regular products collection by _id
+			var product models.Product
+			collection := h.DB.Collections().Products
+			err = collection.FindOne(ctx, bson.M{"_id": productID}).Decode(&product)
+			if err == mongo.ErrNoDocuments {
+				// Product not found in any collection
+				fmt.Printf("[CART] Product not found anywhere: %s\n", productID.Hex())
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"success": false,
+					"message": "Product not found",
+				})
+			} else if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"success": false,
+					"message": "Failed to retrieve product",
+					"error":   err.Error(),
+				})
+			} else {
+				// Product found in regular products collection - check stock
+				if product.Stock < req.Quantity {
+					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+						"success": false,
+						"message": "Not enough stock available",
+					})
+				}
+			}
+		}
 	}
 
 	// Check if the product (same size) is already in the cart. Size empty matches only empty.
@@ -264,6 +285,8 @@ func (h *CartHandler) GetCart(c *fiber.Ctx) error {
 
 	// Fetch product details for each cart item
 	productCollection := h.DB.Collections().Products
+	heroCollection := h.DB.MongoDB.Collection("hero_slides")
+	collectionCollection := h.DB.MongoDB.Collection("home_collection_features")
 	var total float64
 
 	for i, item := range cartItems {
@@ -273,6 +296,56 @@ func (h *CartHandler) GetCart(c *fiber.Ctx) error {
 			cartItems[i].Product = &product
 			// Use discounted price if active
 			total += product.GetFinalPrice() * float64(item.Quantity)
+		} else if err == mongo.ErrNoDocuments {
+			// Try to find in home content by productId
+			var heroSlide models.HeroSlide
+			err = heroCollection.FindOne(ctx, bson.M{"productId": item.ProductID}).Decode(&heroSlide)
+			if err == nil {
+				// Convert hero slide to product format
+				priceFloat := 0.0
+				fmt.Sscanf(heroSlide.Price, "₹%f", &priceFloat)
+				if priceFloat == 0 {
+					// Try without currency symbol
+					fmt.Sscanf(heroSlide.Price, "%f", &priceFloat)
+				}
+
+				product = models.Product{
+					ID:          *heroSlide.ProductID,
+					Name:        heroSlide.Title,
+					Description: heroSlide.Description,
+					Price:       priceFloat,
+					ImageURL:    heroSlide.Image,
+					Images:      []string{heroSlide.Image},
+					Stock:       999, // Home content products have unlimited stock
+				}
+				cartItems[i].Product = &product
+				total += priceFloat * float64(item.Quantity)
+			} else {
+				// Try collection features
+				var collectionFeature models.HomeCollectionFeature
+				err = collectionCollection.FindOne(ctx, bson.M{"productId": item.ProductID}).Decode(&collectionFeature)
+				if err == nil {
+					priceFloat := 0.0
+					if collectionFeature.Price != "" {
+						fmt.Sscanf(collectionFeature.Price, "₹%f", &priceFloat)
+						if priceFloat == 0 {
+							fmt.Sscanf(collectionFeature.Price, "%f", &priceFloat)
+						}
+					}
+
+					product = models.Product{
+						ID:          *collectionFeature.ProductID,
+						Name:        collectionFeature.Title,
+						Description: collectionFeature.Description,
+						Price:       priceFloat,
+						ImageURL:    collectionFeature.Image,
+						Images:      []string{collectionFeature.Image},
+						Stock:       999,
+					}
+					cartItems[i].Product = &product
+					total += priceFloat * float64(item.Quantity)
+				}
+			}
 		}
 	}
 

@@ -38,6 +38,9 @@ func (h *PaymentHandler) cartTotalINR(userID any) (float64, error) {
 	ctx := context.Background()
 	cartCol := h.DB.Collections().CartItems
 	prodCol := h.DB.Collections().Products
+	heroCol := h.DB.MongoDB.Collection("hero_slides")
+	collectionCol := h.DB.MongoDB.Collection("home_collection_features")
+
 	cursor, err := cartCol.Find(ctx, bson.M{"user_id": userID})
 	if err != nil {
 		return 0, err
@@ -53,16 +56,49 @@ func (h *PaymentHandler) cartTotalINR(userID any) (float64, error) {
 	}
 	total := 0.0
 	for _, r := range rows {
+		// Try regular products first
 		var p models.Product
-		if err := prodCol.FindOne(ctx, bson.M{"_id": r.ProductID}).Decode(&p); err != nil {
-			return 0, err
+		err := prodCol.FindOne(ctx, bson.M{"_id": r.ProductID}).Decode(&p)
+		if err == nil {
+			// Found in regular products
+			if p.Stock < r.Quantity {
+				return 0, fmt.Errorf("insufficient stock for product: %s", p.Name)
+			}
+			// Use discounted final price if active
+			unit := p.GetFinalPrice()
+			total += unit * float64(r.Quantity)
+		} else {
+			// Try to find in home content by productId
+			var heroSlide models.HeroSlide
+			err = heroCol.FindOne(ctx, bson.M{"productId": r.ProductID}).Decode(&heroSlide)
+			if err == nil {
+				// Found in hero slides - parse price
+				priceFloat := 0.0
+				fmt.Sscanf(heroSlide.Price, "₹%f", &priceFloat)
+				if priceFloat == 0 {
+					fmt.Sscanf(heroSlide.Price, "%f", &priceFloat)
+				}
+				total += priceFloat * float64(r.Quantity)
+			} else {
+				// Try collection features
+				var collectionFeature models.HomeCollectionFeature
+				err = collectionCol.FindOne(ctx, bson.M{"productId": r.ProductID}).Decode(&collectionFeature)
+				if err == nil {
+					// Found in collection features - parse price
+					priceFloat := 0.0
+					if collectionFeature.Price != "" {
+						fmt.Sscanf(collectionFeature.Price, "₹%f", &priceFloat)
+						if priceFloat == 0 {
+							fmt.Sscanf(collectionFeature.Price, "%f", &priceFloat)
+						}
+					}
+					total += priceFloat * float64(r.Quantity)
+				} else {
+					// Product not found in any collection
+					return 0, fmt.Errorf("product not found in cart")
+				}
+			}
 		}
-		if p.Stock < r.Quantity {
-			return 0, fmt.Errorf("insufficient stock for a product")
-		}
-		// Use discounted final price if active
-		unit := p.GetFinalPrice()
-		total += unit * float64(r.Quantity)
 	}
 	return total, nil
 }

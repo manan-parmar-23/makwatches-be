@@ -64,6 +64,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	app.Get("/categories", categoryHandler.GetPublicCategories)
 	app.Get("/categories/:name/subcategories", categoryHandler.GetPublicSubcategories)
 	app.Get("/home-content", homeContentHandler.GetHomeContent)
+	app.Get("/home-content/product/:productId", homeContentHandler.GetHomeContentByProductID)
 
 	// Public (or auth-protected) upload route for admin (requires auth+role)
 	app.Static("/uploads", "uploads")

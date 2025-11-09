@@ -131,10 +131,19 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 
 		// Use discounted price if active
 		finalPrice := product.GetFinalPrice()
+
+		// Get first image if available
+		productImage := ""
+		if len(product.Images) > 0 {
+			productImage = product.Images[0]
+		}
+
 		// Create order item
 		orderItem := models.OrderItem{
 			ProductID:   product.ID,
 			ProductName: product.Name,
+			Brand:       product.Brand,
+			Image:       productImage,
 			Price:       finalPrice,
 			Size:        item.Size,
 			Quantity:    item.Quantity,

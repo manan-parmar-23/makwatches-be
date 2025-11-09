@@ -21,6 +21,8 @@ type PaymentInfo struct {
 type OrderItem struct {
 	ProductID   primitive.ObjectID `json:"productId" bson:"product_id"`
 	ProductName string             `json:"productName" bson:"product_name"`
+	Brand       string             `json:"brand,omitempty" bson:"brand,omitempty"`
+	Image       string             `json:"image,omitempty" bson:"image,omitempty"`
 	Price       float64            `json:"price" bson:"price"`
 	Size        string             `json:"size,omitempty" bson:"size,omitempty"`
 	Quantity    int                `json:"quantity" bson:"quantity"`

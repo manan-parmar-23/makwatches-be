@@ -1,12 +1,12 @@
 package handlers
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/shivam-mishra-20/mak-watches-be/internal/config"
@@ -77,60 +77,84 @@ func (h *WishlistHandler) GetWishlist(c *fiber.Ctx) error {
 		})
 	}
 
-	// Collect product IDs to retrieve product details
-	productIDs := make([]primitive.ObjectID, 0, len(wishlistItems))
-	for _, item := range wishlistItems {
-		productIDs = append(productIDs, item.ProductID)
-	}
-
-	// Get product details
+	// Build response with product details (check all sources)
 	productCollection := h.DB.Collections().Products
-	productCursor, err := productCollection.Find(
-		ctx,
-		bson.M{"_id": bson.M{"$in": productIDs}},
-	)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "Failed to retrieve product details",
-			"error":   err.Error(),
-		})
-	}
-	defer productCursor.Close(ctx)
+	heroCollection := h.DB.MongoDB.Collection("hero_slides")
+	collectionCollection := h.DB.MongoDB.Collection("home_collection_features")
 
-	// Map products by ID for quick lookup
-	products := make(map[primitive.ObjectID]models.Product)
-	var productList []models.Product
-	if err := productCursor.All(ctx, &productList); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "Failed to decode products",
-			"error":   err.Error(),
-		})
-	}
-
-	for _, product := range productList {
-		products[product.ID] = product
-	}
-
-	// Build response with product details
 	response := make([]fiber.Map, 0, len(wishlistItems))
 	for _, item := range wishlistItems {
-		product, exists := products[item.ProductID]
-		if !exists {
+		// Try to find product in regular products
+		var product models.Product
+		err := productCollection.FindOne(ctx, bson.M{"_id": item.ProductID}).Decode(&product)
+		if err == nil {
+			// Found in regular products
+			response = append(response, fiber.Map{
+				"wishlistId":  item.ID,
+				"productId":   product.ID,
+				"name":        product.Name,
+				"price":       product.Price,
+				"image":       product.ImageURL,
+				"description": product.Description,
+				"inStock":     product.Stock > 0,
+				"addedAt":     item.CreatedAt,
+			})
 			continue
 		}
 
-		response = append(response, fiber.Map{
-			"wishlistId":  item.ID,
-			"productId":   product.ID,
-			"name":        product.Name,
-			"price":       product.Price,
-			"image":       product.ImageURL,
-			"description": product.Description,
-			"inStock":     product.Stock > 0,
-			"addedAt":     item.CreatedAt,
-		})
+		// Try to find in hero slides by productId
+		var heroSlide models.HeroSlide
+		err = heroCollection.FindOne(ctx, bson.M{"productId": item.ProductID}).Decode(&heroSlide)
+		if err == nil {
+			// Found in hero slides
+			priceFloat := 0.0
+			fmt.Sscanf(heroSlide.Price, "₹%f", &priceFloat)
+			if priceFloat == 0 {
+				fmt.Sscanf(heroSlide.Price, "%f", &priceFloat)
+			}
+
+			response = append(response, fiber.Map{
+				"wishlistId":  item.ID,
+				"productId":   item.ProductID,
+				"name":        heroSlide.Title,
+				"price":       priceFloat,
+				"image":       heroSlide.Image,
+				"description": heroSlide.Description,
+				"inStock":     true, // Home content always in stock
+				"addedAt":     item.CreatedAt,
+				"source":      "hero_slide",
+			})
+			continue
+		}
+
+		// Try to find in collection features by productId
+		var collectionFeature models.HomeCollectionFeature
+		err = collectionCollection.FindOne(ctx, bson.M{"productId": item.ProductID}).Decode(&collectionFeature)
+		if err == nil {
+			// Found in collection features
+			priceFloat := 0.0
+			if collectionFeature.Price != "" {
+				fmt.Sscanf(collectionFeature.Price, "₹%f", &priceFloat)
+				if priceFloat == 0 {
+					fmt.Sscanf(collectionFeature.Price, "%f", &priceFloat)
+				}
+			}
+
+			response = append(response, fiber.Map{
+				"wishlistId":  item.ID,
+				"productId":   item.ProductID,
+				"name":        collectionFeature.Title,
+				"price":       priceFloat,
+				"image":       collectionFeature.Image,
+				"description": collectionFeature.Description,
+				"inStock":     true, // Home content always in stock
+				"addedAt":     item.CreatedAt,
+				"source":      "collection_feature",
+			})
+			continue
+		}
+
+		// Product not found in any collection - skip
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -175,21 +199,38 @@ func (h *WishlistHandler) AddToWishlist(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check if product exists
+	// Check if product exists (try home content first, then regular products)
+	heroCollection := h.DB.MongoDB.Collection("hero_slides")
+	collectionCollection := h.DB.MongoDB.Collection("home_collection_features")
 	productCollection := h.DB.Collections().Products
-	var product models.Product
-	err = productCollection.FindOne(ctx, bson.M{"_id": productID}).Decode(&product)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"success": false,
-				"message": "Product not found",
-			})
+
+	productExists := false
+
+	// Try hero slides
+	var heroSlide models.HeroSlide
+	err = heroCollection.FindOne(ctx, bson.M{"productId": productID}).Decode(&heroSlide)
+	if err == nil {
+		productExists = true
+	} else {
+		// Try collection features
+		var collectionFeature models.HomeCollectionFeature
+		err = collectionCollection.FindOne(ctx, bson.M{"productId": productID}).Decode(&collectionFeature)
+		if err == nil {
+			productExists = true
+		} else {
+			// Try regular products
+			var product models.Product
+			err = productCollection.FindOne(ctx, bson.M{"_id": productID}).Decode(&product)
+			if err == nil {
+				productExists = true
+			}
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+	}
+
+	if !productExists {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"success": false,
-			"message": "Failed to check product",
-			"error":   err.Error(),
+			"message": "Product not found",
 		})
 	}
 
@@ -235,19 +276,14 @@ func (h *WishlistHandler) AddToWishlist(c *fiber.Ctx) error {
 		})
 	}
 
-	// Return product details with wishlist info
+	// Return success message - GetWishlist will fetch full details
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"success": true,
 		"message": "Product added to wishlist",
 		"data": fiber.Map{
-			"wishlistId":  wishlistItem.ID,
-			"productId":   product.ID,
-			"name":        product.Name,
-			"price":       product.Price,
-			"image":       product.ImageURL,
-			"description": product.Description,
-			"inStock":     product.Stock > 0,
-			"addedAt":     wishlistItem.CreatedAt,
+			"wishlistId": wishlistItem.ID,
+			"productId":  productID,
+			"addedAt":    wishlistItem.CreatedAt,
 		},
 	})
 }
