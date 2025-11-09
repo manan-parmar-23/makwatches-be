@@ -229,6 +229,6 @@ func HealthHandler(c *fiber.Ctx) error {
 func WelcomeHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"success": true,
-		"message": "Welcome to Makwatches API",
+		"message": "Welcome to Makwatches API's",
 	})
 }
