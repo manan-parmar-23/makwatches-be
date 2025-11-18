@@ -118,7 +118,7 @@ func (h *HomeContentHandler) ListHeroSlides(c *fiber.Ctx) error {
 	})
 }
 
-// CreateHeroSlide inserts a new hero slide document.
+// CreateHeroSlide inserts a new hero slide document and creates a real product.
 func (h *HomeContentHandler) CreateHeroSlide(c *fiber.Ctx) error {
 	ctx := c.Context()
 	var payload models.HeroSlide
@@ -129,9 +129,47 @@ func (h *HomeContentHandler) CreateHeroSlide(c *fiber.Ctx) error {
 		return fiberBadRequest(c, err.Error(), err)
 	}
 
-	coll := h.DB.MongoDB.Collection(heroSlidesCollectionName)
+	// Create product in the products collection ONLY
 	now := time.Now().UTC()
-	payload.ID = primitive.NilObjectID
+	productID := primitive.NewObjectID()
+	product := models.Product{
+		ID:                 productID,
+		Name:               payload.Title,
+		Brand:              payload.Brand,
+		Description:        payload.Description,
+		Price:              payload.ProductPrice,
+		Category:           payload.Category,
+		MainCategory:       payload.MainCategory,
+		Subcategory:        payload.Subcategory,
+		ImageURL:           payload.Image,
+		Images:             payload.Images,
+		Stock:              payload.Stock,
+		Gender:             payload.Gender,
+		DialColor:          payload.DialColor,
+		DialShape:          payload.DialShape,
+		DialType:           payload.DialType,
+		StrapColor:         payload.StrapColor,
+		StrapMaterial:      payload.StrapMaterial,
+		Style:              payload.Style,
+		DialThickness:      payload.DialThickness,
+		DiscountPercentage: payload.DiscountPercentage,
+		DiscountAmount:     payload.DiscountAmount,
+		DiscountStartDate:  payload.DiscountStartDate,
+		DiscountEndDate:    payload.DiscountEndDate,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+
+	productColl := h.DB.Collections().Products
+	_, err := productColl.InsertOne(ctx, product)
+	if err != nil {
+		return fiberError(c, err, "Failed to create product for hero slide")
+	}
+
+	// Create hero slide reference with minimal data
+	coll := h.DB.MongoDB.Collection(heroSlidesCollectionName)
+	payload.ID = primitive.NewObjectID()
+	payload.ProductID = &productID
 	payload.CreatedAt = now
 	payload.UpdatedAt = now
 	if payload.Position <= 0 {
@@ -143,31 +181,21 @@ func (h *HomeContentHandler) CreateHeroSlide(c *fiber.Ctx) error {
 		}
 	}
 
-	// Generate productId if not provided
-	if payload.ProductID == nil || payload.ProductID.IsZero() {
-		newProductID := primitive.NewObjectID()
-		payload.ProductID = &newProductID
-	}
-
-	res, err := coll.InsertOne(ctx, payload)
+	_, err = coll.InsertOne(ctx, payload)
 	if err != nil {
 		return fiberError(c, err, "Failed to create hero slide")
-	}
-
-	if insertedID, ok := res.InsertedID.(primitive.ObjectID); ok {
-		payload.ID = insertedID
 	}
 
 	h.clearHomeCache(ctx)
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"success": true,
-		"message": "Hero slide created",
+		"message": "Hero slide created successfully",
 		"data":    payload,
 	})
 }
 
-// UpdateHeroSlide updates an existing hero slide document.
+// UpdateHeroSlide updates an existing hero slide document and its associated product.
 func (h *HomeContentHandler) UpdateHeroSlide(c *fiber.Ctx) error {
 	ctx := c.Context()
 	objectID, err := parseObjectID(c.Params("id"))
@@ -183,7 +211,7 @@ func (h *HomeContentHandler) UpdateHeroSlide(c *fiber.Ctx) error {
 		return fiberBadRequest(c, err.Error(), err)
 	}
 
-	// First, fetch existing slide to check if productId exists
+	// First, fetch existing slide to get productId
 	coll := h.DB.MongoDB.Collection(heroSlidesCollectionName)
 	var existing models.HeroSlide
 	err = coll.FindOne(ctx, bson.M{"_id": objectID}).Decode(&existing)
@@ -194,6 +222,89 @@ func (h *HomeContentHandler) UpdateHeroSlide(c *fiber.Ctx) error {
 		return fiberError(c, err, "Failed to fetch existing hero slide")
 	}
 
+	now := time.Now().UTC()
+	productID := existing.ProductID
+	productColl := h.DB.Collections().Products
+
+	// Check if product exists in products collection
+	var existingProduct models.Product
+	productExists := false
+	if productID != nil && !productID.IsZero() {
+		err = productColl.FindOne(ctx, bson.M{"_id": *productID}).Decode(&existingProduct)
+		if err == nil {
+			productExists = true
+		}
+	}
+
+	// If product doesn't exist in products collection, create it
+	if !productExists {
+		newProductID := primitive.NewObjectID()
+		newProduct := models.Product{
+			ID:                 newProductID,
+			Name:               payload.Title,
+			Brand:              payload.Brand,
+			Description:        payload.Description,
+			Price:              payload.ProductPrice,
+			Category:           payload.Category,
+			MainCategory:       payload.MainCategory,
+			Subcategory:        payload.Subcategory,
+			ImageURL:           payload.Image,
+			Images:             payload.Images,
+			Stock:              payload.Stock,
+			Gender:             payload.Gender,
+			DialColor:          payload.DialColor,
+			DialShape:          payload.DialShape,
+			DialType:           payload.DialType,
+			StrapColor:         payload.StrapColor,
+			StrapMaterial:      payload.StrapMaterial,
+			Style:              payload.Style,
+			DialThickness:      payload.DialThickness,
+			DiscountPercentage: payload.DiscountPercentage,
+			DiscountAmount:     payload.DiscountAmount,
+			DiscountStartDate:  payload.DiscountStartDate,
+			DiscountEndDate:    payload.DiscountEndDate,
+			CreatedAt:          now,
+			UpdatedAt:          now,
+		}
+		_, err = productColl.InsertOne(ctx, newProduct)
+		if err != nil {
+			return fiberError(c, err, "Failed to create product for hero slide")
+		}
+		productID = &newProductID
+	} else {
+		// Update existing product
+		productUpdate := bson.M{
+			"name":                payload.Title,
+			"brand":               payload.Brand,
+			"description":         payload.Description,
+			"price":               payload.ProductPrice,
+			"category":            payload.Category,
+			"main_category":       payload.MainCategory,
+			"subcategory":         payload.Subcategory,
+			"image_url":           payload.Image,
+			"images":              payload.Images,
+			"stock":               payload.Stock,
+			"gender":              payload.Gender,
+			"dial_color":          payload.DialColor,
+			"dial_shape":          payload.DialShape,
+			"dial_type":           payload.DialType,
+			"strap_color":         payload.StrapColor,
+			"strap_material":      payload.StrapMaterial,
+			"style":               payload.Style,
+			"dial_thickness":      payload.DialThickness,
+			"discount_percentage": payload.DiscountPercentage,
+			"discount_amount":     payload.DiscountAmount,
+			"discount_start_date": payload.DiscountStartDate,
+			"discount_end_date":   payload.DiscountEndDate,
+			"updated_at":          now,
+		}
+		_, err = productColl.UpdateByID(ctx, *productID, bson.M{"$set": productUpdate})
+		if err != nil {
+			return fiberError(c, err, "Failed to update product")
+		}
+	}
+
+	// Update hero slide with reference to product and display data
 	update := bson.M{
 		"title":       payload.Title,
 		"subtitle":    payload.Subtitle,
@@ -203,16 +314,11 @@ func (h *HomeContentHandler) UpdateHeroSlide(c *fiber.Ctx) error {
 		"features":    payload.Features,
 		"gradient":    payload.Gradient,
 		"glowColor":   payload.GlowColor,
-		"updatedAt":   time.Now().UTC(),
+		"productId":   productID,
+		"updatedAt":   now,
 	}
 	if payload.Position > 0 {
 		update["position"] = payload.Position
-	}
-
-	// Generate productId if it doesn't exist yet
-	if existing.ProductID == nil || existing.ProductID.IsZero() {
-		newProductID := primitive.NewObjectID()
-		update["productId"] = newProductID
 	}
 
 	result, err := coll.UpdateByID(ctx, objectID, bson.M{"$set": update})
@@ -232,7 +338,7 @@ func (h *HomeContentHandler) UpdateHeroSlide(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
-		"message": "Hero slide updated",
+		"message": "Hero slide updated successfully",
 		"data":    updated,
 	})
 }
@@ -417,9 +523,47 @@ func (h *HomeContentHandler) CreateCollectionFeature(c *fiber.Ctx) error {
 		return fiberBadRequest(c, err.Error(), err)
 	}
 
-	coll := h.DB.MongoDB.Collection(collectionFeaturesCollectionName)
+	// Create product in the products collection ONLY
 	now := time.Now().UTC()
-	payload.ID = primitive.NilObjectID
+	productID := primitive.NewObjectID()
+	product := models.Product{
+		ID:                 productID,
+		Name:               payload.Title,
+		Brand:              payload.Brand,
+		Description:        payload.Description,
+		Price:              payload.ProductPrice,
+		Category:           payload.Category,
+		MainCategory:       payload.MainCategory,
+		Subcategory:        payload.Subcategory,
+		ImageURL:           payload.Image,
+		Images:             payload.Images,
+		Stock:              payload.Stock,
+		Gender:             payload.Gender,
+		DialColor:          payload.DialColor,
+		DialShape:          payload.DialShape,
+		DialType:           payload.DialType,
+		StrapColor:         payload.StrapColor,
+		StrapMaterial:      payload.StrapMaterial,
+		Style:              payload.Style,
+		DialThickness:      payload.DialThickness,
+		DiscountPercentage: payload.DiscountPercentage,
+		DiscountAmount:     payload.DiscountAmount,
+		DiscountStartDate:  payload.DiscountStartDate,
+		DiscountEndDate:    payload.DiscountEndDate,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+
+	productColl := h.DB.Collections().Products
+	_, err := productColl.InsertOne(ctx, product)
+	if err != nil {
+		return fiberError(c, err, "Failed to create product for collection feature")
+	}
+
+	// Create collection feature reference with minimal data
+	coll := h.DB.MongoDB.Collection(collectionFeaturesCollectionName)
+	payload.ID = primitive.NewObjectID()
+	payload.ProductID = &productID
 	payload.CreatedAt = now
 	payload.UpdatedAt = now
 	if payload.Position <= 0 {
@@ -431,25 +575,16 @@ func (h *HomeContentHandler) CreateCollectionFeature(c *fiber.Ctx) error {
 		}
 	}
 
-	// Generate productId if not provided
-	if payload.ProductID == nil || payload.ProductID.IsZero() {
-		newProductID := primitive.NewObjectID()
-		payload.ProductID = &newProductID
-	}
-
-	res, err := coll.InsertOne(ctx, payload)
+	_, err = coll.InsertOne(ctx, payload)
 	if err != nil {
 		return fiberError(c, err, "Failed to create collection feature")
-	}
-	if insertedID, ok := res.InsertedID.(primitive.ObjectID); ok {
-		payload.ID = insertedID
 	}
 
 	h.clearHomeCache(ctx)
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"success": true,
-		"message": "Collection feature created",
+		"message": "Collection feature created successfully",
 		"data":    payload,
 	})
 }
@@ -469,7 +604,7 @@ func (h *HomeContentHandler) UpdateCollectionFeature(c *fiber.Ctx) error {
 		return fiberBadRequest(c, err.Error(), err)
 	}
 
-	// First, fetch existing feature to check if productId exists
+	// First, fetch existing feature to get productId
 	coll := h.DB.MongoDB.Collection(collectionFeaturesCollectionName)
 	var existing models.HomeCollectionFeature
 	err = coll.FindOne(ctx, bson.M{"_id": objectID}).Decode(&existing)
@@ -480,6 +615,89 @@ func (h *HomeContentHandler) UpdateCollectionFeature(c *fiber.Ctx) error {
 		return fiberError(c, err, "Failed to fetch existing collection feature")
 	}
 
+	now := time.Now().UTC()
+	productID := existing.ProductID
+	productColl := h.DB.Collections().Products
+
+	// Check if product exists in products collection
+	var existingProduct models.Product
+	productExists := false
+	if productID != nil && !productID.IsZero() {
+		err = productColl.FindOne(ctx, bson.M{"_id": *productID}).Decode(&existingProduct)
+		if err == nil {
+			productExists = true
+		}
+	}
+
+	// If product doesn't exist in products collection, create it
+	if !productExists {
+		newProductID := primitive.NewObjectID()
+		newProduct := models.Product{
+			ID:                 newProductID,
+			Name:               payload.Title,
+			Brand:              payload.Brand,
+			Description:        payload.Description,
+			Price:              payload.ProductPrice,
+			Category:           payload.Category,
+			MainCategory:       payload.MainCategory,
+			Subcategory:        payload.Subcategory,
+			ImageURL:           payload.Image,
+			Images:             payload.Images,
+			Stock:              payload.Stock,
+			Gender:             payload.Gender,
+			DialColor:          payload.DialColor,
+			DialShape:          payload.DialShape,
+			DialType:           payload.DialType,
+			StrapColor:         payload.StrapColor,
+			StrapMaterial:      payload.StrapMaterial,
+			Style:              payload.Style,
+			DialThickness:      payload.DialThickness,
+			DiscountPercentage: payload.DiscountPercentage,
+			DiscountAmount:     payload.DiscountAmount,
+			DiscountStartDate:  payload.DiscountStartDate,
+			DiscountEndDate:    payload.DiscountEndDate,
+			CreatedAt:          now,
+			UpdatedAt:          now,
+		}
+		_, err = productColl.InsertOne(ctx, newProduct)
+		if err != nil {
+			return fiberError(c, err, "Failed to create product for collection feature")
+		}
+		productID = &newProductID
+	} else {
+		// Update existing product
+		productUpdate := bson.M{
+			"name":                payload.Title,
+			"brand":               payload.Brand,
+			"description":         payload.Description,
+			"price":               payload.ProductPrice,
+			"category":            payload.Category,
+			"main_category":       payload.MainCategory,
+			"subcategory":         payload.Subcategory,
+			"image_url":           payload.Image,
+			"images":              payload.Images,
+			"stock":               payload.Stock,
+			"gender":              payload.Gender,
+			"dial_color":          payload.DialColor,
+			"dial_shape":          payload.DialShape,
+			"dial_type":           payload.DialType,
+			"strap_color":         payload.StrapColor,
+			"strap_material":      payload.StrapMaterial,
+			"style":               payload.Style,
+			"dial_thickness":      payload.DialThickness,
+			"discount_percentage": payload.DiscountPercentage,
+			"discount_amount":     payload.DiscountAmount,
+			"discount_start_date": payload.DiscountStartDate,
+			"discount_end_date":   payload.DiscountEndDate,
+			"updated_at":          now,
+		}
+		_, err = productColl.UpdateByID(ctx, *productID, bson.M{"$set": productUpdate})
+		if err != nil {
+			return fiberError(c, err, "Failed to update product")
+		}
+	}
+
+	// Update collection feature with reference to product and display data
 	update := bson.M{
 		"tagline":      payload.Tagline,
 		"title":        payload.Title,
@@ -490,16 +708,11 @@ func (h *HomeContentHandler) UpdateCollectionFeature(c *fiber.Ctx) error {
 		"image":        payload.Image,
 		"imageAlt":     payload.ImageAlt,
 		"layout":       payload.Layout,
-		"updatedAt":    time.Now().UTC(),
+		"productId":    productID,
+		"updatedAt":    now,
 	}
 	if payload.Position > 0 {
 		update["position"] = payload.Position
-	}
-
-	// Generate productId if it doesn't exist yet
-	if existing.ProductID == nil || existing.ProductID.IsZero() {
-		newProductID := primitive.NewObjectID()
-		update["productId"] = newProductID
 	}
 
 	res, err := coll.UpdateByID(ctx, objectID, bson.M{"$set": update})
@@ -519,7 +732,7 @@ func (h *HomeContentHandler) UpdateCollectionFeature(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
-		"message": "Collection feature updated",
+		"message": "Collection feature updated successfully",
 		"data":    updated,
 	})
 }
@@ -1135,7 +1348,7 @@ func fiberNotFound(c *fiber.Ctx, message string) error {
 	})
 }
 
-// GetHomeContentByProductID retrieves hero slide or collection feature by productId
+// GetHomeContentByProductID retrieves product from products collection (created via home content)
 // GET /home-content/product/:productId
 func (h *HomeContentHandler) GetHomeContentByProductID(c *fiber.Ctx) error {
 	ctx := c.Context()
@@ -1150,60 +1363,45 @@ func (h *HomeContentHandler) GetHomeContentByProductID(c *fiber.Ctx) error {
 		return fiberBadRequest(c, "Invalid product ID format", err)
 	}
 
-	// First, try to find in hero slides
-	heroCollection := h.DB.MongoDB.Collection(heroSlidesCollectionName)
-	var heroSlide models.HeroSlide
-	err = heroCollection.FindOne(ctx, bson.M{"productId": objID}).Decode(&heroSlide)
-	if err == nil {
-		// Found in hero slides, convert to product-like response
-		return c.JSON(fiber.Map{
-			"success": true,
-			"message": "Product details retrieved from hero content",
-			"data": fiber.Map{
-				"id":          heroSlide.ProductID.Hex(),
-				"name":        heroSlide.Title,
-				"description": heroSlide.Description,
-				"price":       heroSlide.Price,
-				"images":      []string{heroSlide.Image},
-				"imageUrl":    heroSlide.Image,
-				"subtitle":    heroSlide.Subtitle,
-				"features":    heroSlide.Features,
-				"source":      "hero_slide",
-				"sourceId":    heroSlide.ID.Hex(),
-			},
-		})
-	}
-
-	// If not found in hero slides, try collection features
-	collectionCollection := h.DB.MongoDB.Collection(collectionFeaturesCollectionName)
-	var collectionFeature models.HomeCollectionFeature
-	err = collectionCollection.FindOne(ctx, bson.M{"productId": objID}).Decode(&collectionFeature)
-	if err == nil {
-		// Found in collection features, convert to product-like response
-		// Parse price if available (may be string format like "₹3800")
-		var priceValue interface{} = 0
-		if collectionFeature.Price != "" {
-			priceValue = collectionFeature.Price
+	// Fetch the product directly from products collection
+	productColl := h.DB.Collections().Products
+	var product models.Product
+	err = productColl.FindOne(ctx, bson.M{"_id": objID}).Decode(&product)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return fiberNotFound(c, "Product not found")
 		}
-
-		return c.JSON(fiber.Map{
-			"success": true,
-			"message": "Product details retrieved from collection content",
-			"data": fiber.Map{
-				"id":           collectionFeature.ProductID.Hex(),
-				"name":         collectionFeature.Title,
-				"description":  collectionFeature.Description,
-				"price":        priceValue,
-				"images":       []string{collectionFeature.Image},
-				"imageUrl":     collectionFeature.Image,
-				"tagline":      collectionFeature.Tagline,
-				"availability": collectionFeature.Availability,
-				"source":       "collection_feature",
-				"sourceId":     collectionFeature.ID.Hex(),
-			},
-		})
+		return fiberError(c, err, "Failed to fetch product")
 	}
 
-	// Not found in either collection
-	return fiberNotFound(c, "Product not found in home content")
+	// Return the product with all fields
+	return c.JSON(fiber.Map{
+		"success": true,
+		"message": "Product retrieved successfully",
+		"data": fiber.Map{
+			"id":                 product.ID.Hex(),
+			"name":               product.Name,
+			"description":        product.Description,
+			"price":              product.Price,
+			"brand":              product.Brand,
+			"category":           product.Category,
+			"mainCategory":       product.MainCategory,
+			"subcategory":        product.Subcategory,
+			"images":             product.Images,
+			"imageUrl":           product.ImageURL,
+			"stock":              product.Stock,
+			"gender":             product.Gender,
+			"dialColor":          product.DialColor,
+			"dialShape":          product.DialShape,
+			"dialType":           product.DialType,
+			"strapColor":         product.StrapColor,
+			"strapMaterial":      product.StrapMaterial,
+			"style":              product.Style,
+			"dialThickness":      product.DialThickness,
+			"discountPercentage": product.DiscountPercentage,
+			"discountAmount":     product.DiscountAmount,
+			"discountStartDate":  product.DiscountStartDate,
+			"discountEndDate":    product.DiscountEndDate,
+		},
+	})
 }

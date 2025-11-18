@@ -262,15 +262,15 @@ func (h *ProductHandler) GetPublicProducts(c *fiber.Ctx) error {
 	sortBy := c.Query("sortBy", "createdAt")
 	order := c.Query("order", "desc")
 	pageStr := c.Query("page", "1")
-	limitStr := c.Query("limit", "12")
+	limitStr := c.Query("limit", "100")
 
 	page, _ := strconv.Atoi(pageStr)
 	if page < 1 {
 		page = 1
 	}
 	limit, _ := strconv.Atoi(limitStr)
-	if limit < 1 || limit > 100 {
-		limit = 12
+	if limit < 1 || limit > 200 {
+		limit = 100
 	}
 
 	filter := bson.M{}
