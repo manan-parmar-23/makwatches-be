@@ -113,6 +113,21 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	// Public webhook endpoint for Razorpay (Razorpay will POST here)
 	app.Post("/webhooks/razorpay", paymentHandler.RazorpayWebhook)
 
+	// Shipping handler
+	shippingHandler := NewShippingHandler(db, cfg)
+
+	// Public shipping routes (no auth required)
+	app.Get("/shipping/check-pincode/:pincode", shippingHandler.CheckPincode)
+	app.Get("/shipping/check-pincode", shippingHandler.CheckPincode) // Also support query param
+	app.Get("/shipping/track/:waybill", shippingHandler.TrackByWaybill)
+
+	// Delhivery webhook (no auth, called by Delhivery servers)
+	app.Post("/webhooks/delhivery", shippingHandler.DelhiveryWebhook)
+
+	// Protected shipping routes
+	shipping := api.Group("/shipping")
+	shipping.Get("/track/order/:orderID", shippingHandler.TrackShipment) // Track by order ID
+
 	// Admin only routes (must authenticate first, then check role)
 	admin := app.Group("/admin", middleware.Auth(cfg.JWTSecret), middleware.Role("admin"))
 	admin.Get("/accounts", adminAccountHandler.GetAllAccounts)
@@ -171,6 +186,14 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	adminOrders := orders.Group("/", middleware.Role("admin"))
 	adminOrders.Patch("/:orderID/status", orderHandler.UpdateOrderStatus)
 
+	// Admin shipping routes
+	adminShipping := admin.Group("/shipping")
+	adminShipping.Post("/orders/:orderID/retry", shippingHandler.RetryShipment)   // Retry failed shipment
+	adminShipping.Post("/orders/:orderID/cancel", shippingHandler.CancelShipment) // Cancel shipment
+	adminShipping.Get("/orders/:orderID/label", shippingHandler.GetShippingLabel) // Get shipping label
+	adminShipping.Post("/bulk-track", shippingHandler.BulkTrackShipments)         // Track multiple shipments
+	adminShipping.Post("/request-pickup", shippingHandler.RequestPickup)          // Request pickup from Delhivery
+
 	// Checkout route
 	api.Post("/checkout", orderHandler.Checkout)
 
@@ -207,6 +230,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	account.Delete("/wishlist/:id", accountHandler.RemoveAccountWishlistItem)
 	account.Get("/orders", accountHandler.GetAccountOrders)
 	account.Get("/orders/:orderID", accountHandler.GetAccountOrder)
+	account.Post("/orders/:orderID/cancel", orderHandler.CancelOrder) // Cancel order endpoint
 
 	// Address book routes
 	addresses := api.Group("/addresses")

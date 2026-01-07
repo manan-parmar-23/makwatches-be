@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -18,34 +21,99 @@ import (
 	"github.com/shivam-mishra-20/mak-watches-be/internal/database"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/middleware"
 	"github.com/shivam-mishra-20/mak-watches-be/internal/models"
+	"github.com/shivam-mishra-20/mak-watches-be/internal/services"
 )
 
 // OrderHandler handles order related requests
 type OrderHandler struct {
-	DB     *database.DBClient
-	Config *config.Config
+	DB               *database.DBClient
+	Config           *config.Config
+	DelhiveryService *services.DelhiveryService
 }
 
 // NewOrderHandler creates a new instance of OrderHandler
 func NewOrderHandler(db *database.DBClient, cfg *config.Config) *OrderHandler {
-	return &OrderHandler{
-		DB:     db,
-		Config: cfg,
+	log.Printf("[ORDER_HANDLER] Initializing OrderHandler with Delhivery config...")
+	log.Printf("[ORDER_HANDLER] Delhivery API Token: %s (length: %d)", maskToken(cfg.DelhiveryAPIToken), len(cfg.DelhiveryAPIToken))
+	log.Printf("[ORDER_HANDLER] Delhivery Base URL: %s", cfg.DelhiveryBaseURL)
+	log.Printf("[ORDER_HANDLER] Delhivery Pickup Location: %s", cfg.DelhiveryPickupLocation)
+
+	// Initialize Delhivery service
+	delhiveryConfig := services.DelhiveryConfig{
+		APIToken:       cfg.DelhiveryAPIToken,
+		BaseURL:        cfg.DelhiveryBaseURL,
+		PickupLocation: cfg.DelhiveryPickupLocation,
+		SellerName:     cfg.DelhiverySellerName,
+		SellerPhone:    cfg.DelhiverySellerPhone,
+		SellerAddress:  cfg.DelhiverySellerAddress,
+		SellerCity:     cfg.DelhiverySellerCity,
+		SellerState:    cfg.DelhiverySellerState,
+		SellerPincode:  cfg.DelhiverySellerPincode,
+		ReturnAddress:  cfg.DelhiveryReturnAddress,
+		ReturnCity:     cfg.DelhiveryReturnCity,
+		ReturnState:    cfg.DelhiveryReturnState,
+		ReturnPincode:  cfg.DelhiveryReturnPincode,
+		ReturnPhone:    cfg.DelhiveryReturnPhone,
 	}
+
+	delhiveryService := services.NewDelhiveryService(delhiveryConfig)
+	if delhiveryService != nil {
+		log.Printf("[ORDER_HANDLER] ✅ DelhiveryService initialized successfully")
+		log.Printf("[ORDER_HANDLER] 🏪 Pickup Config: Location='%s', Address='%s', City='%s'",
+			cfg.DelhiveryPickupLocation, cfg.DelhiverySellerAddress, cfg.DelhiverySellerCity)
+	} else {
+		log.Printf("[ORDER_HANDLER] ⚠️ DelhiveryService is nil!")
+	}
+
+	return &OrderHandler{
+		DB:               db,
+		Config:           cfg,
+		DelhiveryService: delhiveryService,
+	}
+}
+
+// maskToken masks the API token for logging (shows first 4 and last 4 chars)
+func maskToken(token string) string {
+	if len(token) <= 8 {
+		return "***"
+	}
+	return token[:4] + "..." + token[len(token)-4:]
+}
+
+// generateOrderNumber generates a human-readable order number like MAK-20251214-A1B2
+func (h *OrderHandler) generateOrderNumber(ctx context.Context) string {
+	// Get today's date
+	today := time.Now().Format("20060102")
+
+	// Count orders created today to get sequence number
+	startOfDay := time.Now().Truncate(24 * time.Hour)
+	orderCollection := h.DB.Collections().Orders
+	count, err := orderCollection.CountDocuments(ctx, bson.M{
+		"created_at": bson.M{"$gte": startOfDay},
+	})
+	if err != nil {
+		count = 0
+	}
+
+	// Generate order number: MAK-YYYYMMDD-XXX (XXX is sequence number)
+	return fmt.Sprintf("MAK-%s-%03d", today, count+1)
 }
 
 // Checkout processes the checkout and creates an order
 func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
+	log.Printf("[CHECKOUT] 🛒 Checkout endpoint called")
 	ctx := c.Context()
 
 	// Get user info from token
 	user, ok := c.Locals("user").(*middleware.TokenMetadata)
 	if !ok {
+		log.Printf("[CHECKOUT] ❌ Unauthorized - User data not found")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
 			"message": "Unauthorized - User data not found",
 		})
 	}
+	log.Printf("[CHECKOUT] 👤 User authenticated: %s", user.UserID.Hex())
 
 	// Parse request body
 	var req models.CheckoutRequest
@@ -210,10 +278,28 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 		orderStatus = "processing"
 	}
 
+	// Generate human-readable order number
+	orderNumber := h.generateOrderNumber(ctx)
+
+	// Prepare pickup details from configuration
+	pickupDetails := &models.PickupDetails{
+		LocationName: h.Config.DelhiveryPickupLocation,
+		SellerName:   h.Config.DelhiverySellerName,
+		Address:      h.Config.DelhiverySellerAddress,
+		City:         h.Config.DelhiverySellerCity,
+		State:        h.Config.DelhiverySellerState,
+		Pincode:      h.Config.DelhiverySellerPincode,
+		Phone:        h.Config.DelhiverySellerPhone,
+		Country:      "India",
+	}
+	log.Printf("[CHECKOUT] 🏪 PickupDetails: Location='%s', Address='%s', City='%s'",
+		pickupDetails.LocationName, pickupDetails.Address, pickupDetails.City)
+
 	// Create the order
 	now := time.Now()
 	order := models.Order{
 		ID:              primitive.NewObjectID(),
+		OrderNumber:     orderNumber,
 		UserID:          user.UserID,
 		Items:           orderItems,
 		Total:           total,
@@ -221,6 +307,10 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 		PaymentStatus:   paymentStatus,
 		ShippingAddress: req.ShippingAddress,
 		PaymentInfo:     req.PaymentInfo,
+		PickupDetails:   pickupDetails,
+		CustomerPhone:   req.CustomerPhone,
+		CustomerEmail:   req.CustomerEmail,
+		CustomerName:    req.CustomerName,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -234,6 +324,22 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 			"message": "Failed to create order",
 			"error":   err.Error(),
 		})
+	}
+
+	// Log order creation success
+	log.Printf("[CHECKOUT] ✅ Order created: OrderNumber=%s, OrderID=%s", order.OrderNumber, order.ID.Hex())
+	if order.PickupDetails != nil {
+		log.Printf("[CHECKOUT] 🏪 PickupDetails saved: Location='%s'", order.PickupDetails.LocationName)
+	} else {
+		log.Printf("[CHECKOUT] ⚠️ PickupDetails is NIL!")
+	}
+
+	// Create shipment with Delhivery asynchronously
+	if h.DelhiveryService != nil {
+		log.Printf("[CHECKOUT] 📦 Starting Delhivery shipment creation goroutine for OrderID=%s", order.ID.Hex())
+		go h.createDelhiveryShipment(&order)
+	} else {
+		log.Printf("[CHECKOUT] ⚠️ DelhiveryService is nil - shipment will NOT be created for OrderID=%s", order.ID.Hex())
 	}
 
 	// Clear the user's cart
@@ -259,6 +365,184 @@ func (h *OrderHandler) Checkout(c *fiber.Ctx) error {
 		"message": "Order placed successfully",
 		"data":    order,
 	})
+}
+
+// createDelhiveryShipment creates a shipment with Delhivery for the order
+func (h *OrderHandler) createDelhiveryShipment(order *models.Order) {
+	// Use human-readable order number for logging
+	orderDisplay := order.OrderNumber
+	if orderDisplay == "" {
+		orderDisplay = order.ID.Hex()
+	}
+
+	log.Printf("[DELHIVERY] ========== Starting shipment creation for order %s ==========", orderDisplay)
+
+	// Check if Delhivery is configured
+	if h.Config.DelhiveryAPIToken == "" {
+		log.Printf("[DELHIVERY] ERROR: API Token not configured! Skipping shipment for order %s", orderDisplay)
+		log.Printf("[DELHIVERY] Please set DELHIVERY_API_TOKEN in your .env file")
+		return
+	}
+	log.Printf("[DELHIVERY] API Token configured: %s... (first 10 chars)", h.Config.DelhiveryAPIToken[:min(10, len(h.Config.DelhiveryAPIToken))])
+	log.Printf("[DELHIVERY] Base URL: %s", h.Config.DelhiveryBaseURL)
+	log.Printf("[DELHIVERY] Pickup Location: %s", h.Config.DelhiveryPickupLocation)
+
+	// Small delay to ensure order is fully committed to database
+	log.Printf("[DELHIVERY] Waiting 2 seconds for order to be committed...")
+	time.Sleep(2 * time.Second)
+
+	// Build product description from order items
+	var productNames []string
+	totalQuantity := 0
+	for _, item := range order.Items {
+		productNames = append(productNames, item.ProductName)
+		totalQuantity += item.Quantity
+	}
+	productDesc := strings.Join(productNames, ", ")
+	if len(productDesc) > 200 {
+		productDesc = productDesc[:197] + "..."
+	}
+	log.Printf("[DELHIVERY] Product description: %s", productDesc)
+	log.Printf("[DELHIVERY] Total quantity: %d", totalQuantity)
+
+	// Determine payment mode
+	paymentMode := "Prepaid"
+	codAmount := 0.0
+	if order.PaymentInfo.Method == "cod" {
+		paymentMode = "COD"
+		codAmount = order.Total
+	}
+	log.Printf("[DELHIVERY] Payment mode: %s, COD Amount: %.2f", paymentMode, codAmount)
+
+	// Get customer details
+	customerName := order.CustomerName
+	if customerName == "" {
+		customerName = order.ShippingAddress.Name
+	}
+	if customerName == "" {
+		customerName = "Customer"
+	}
+
+	customerPhone := order.CustomerPhone
+	if customerPhone == "" {
+		customerPhone = order.ShippingAddress.Phone
+	}
+
+	// Get city and state from shipping address (ensure correct values are used)
+	customerCity := strings.TrimSpace(order.ShippingAddress.City)
+	customerState := strings.TrimSpace(order.ShippingAddress.State)
+	customerPincode := strings.TrimSpace(order.ShippingAddress.ZipCode)
+	customerAddress := strings.TrimSpace(order.ShippingAddress.Street)
+	customerCountry := strings.TrimSpace(order.ShippingAddress.Country)
+	if customerCountry == "" {
+		customerCountry = "India"
+	}
+
+	log.Printf("[DELHIVERY] Customer Name: %s", customerName)
+	log.Printf("[DELHIVERY] Customer Phone: %s", customerPhone)
+	log.Printf("[DELHIVERY] Customer Address: %s", customerAddress)
+	log.Printf("[DELHIVERY] Customer City: %s, State: %s, Pincode: %s", customerCity, customerState, customerPincode)
+
+	// Use human-readable order number for Delhivery
+	orderRef := order.OrderNumber
+	if orderRef == "" {
+		// Fallback to ObjectID if OrderNumber not set
+		orderRef = order.ID.Hex()
+	}
+	log.Printf("[DELHIVERY] Order Reference: %s", orderRef)
+
+	// Create shipment request with all details
+	req := services.CreateShipmentRequest{
+		CustomerName:    customerName,
+		CustomerPhone:   customerPhone,
+		CustomerEmail:   order.CustomerEmail,
+		CustomerAddress: customerAddress,
+		CustomerCity:    customerCity,
+		CustomerState:   customerState,
+		CustomerPincode: customerPincode,
+		CustomerCountry: customerCountry,
+		OrderID:         orderRef, // Use human-readable order number
+		OrderDate:       order.CreatedAt.Format("2006-01-02"),
+		TotalAmount:     order.Total,
+		PaymentMode:     paymentMode,
+		CODAmount:       codAmount,
+		ProductQuantity: totalQuantity,
+		ProductDesc:     productDesc,
+		// Default package dimensions for watches
+		Weight:  500, // 500 grams
+		Length:  15,  // 15 cm
+		Breadth: 10,  // 10 cm
+		Height:  8,   // 8 cm
+	}
+
+	// Create items list
+	for _, item := range order.Items {
+		req.Items = append(req.Items, services.ShipmentItem{
+			Name:     item.ProductName,
+			SKU:      item.ProductID.Hex(),
+			Quantity: item.Quantity,
+			Price:    item.Price,
+		})
+	}
+
+	log.Printf("[DELHIVERY] Request prepared with %d items, total amount: %.2f", len(req.Items), req.TotalAmount)
+	log.Printf("[DELHIVERY] Calling Delhivery API...")
+
+	// Call Delhivery API
+	shipmentResp, err := h.DelhiveryService.CreateShipment(req)
+
+	orderCollection := h.DB.MongoDB.Collection("orders")
+	bgCtx := context.Background()
+
+	if err != nil {
+		log.Printf("[DELHIVERY] ERROR: Failed to create shipment for order %s: %v", orderDisplay, err)
+
+		// Update order with error info
+		_, updateErr := orderCollection.UpdateOne(bgCtx, bson.M{"_id": order.ID}, bson.M{
+			"$set": bson.M{
+				"shipping_info": models.ShippingInfo{
+					Provider:          "delhivery",
+					ShipmentError:     err.Error(),
+					RetryCount:        1,
+					ShipmentCreatedAt: time.Now(),
+				},
+				"updated_at": time.Now(),
+			},
+		})
+		if updateErr != nil {
+			log.Printf("[DELHIVERY] ERROR: Failed to update order with error info: %v", updateErr)
+		} else {
+			log.Printf("[DELHIVERY] Order updated with error info")
+		}
+		log.Printf("[DELHIVERY] ========== Shipment creation FAILED for order %s ==========", orderDisplay)
+		return
+	}
+
+	log.Printf("[DELHIVERY] SUCCESS: Waybill received: %s", shipmentResp.Waybill)
+
+	// Update order with successful shipping info
+	trackingURL := fmt.Sprintf("https://www.delhivery.com/track/package/%s", shipmentResp.Waybill)
+	_, updateErr := orderCollection.UpdateOne(bgCtx, bson.M{"_id": order.ID}, bson.M{
+		"$set": bson.M{
+			"shipping_info": models.ShippingInfo{
+				Provider:          "delhivery",
+				Waybill:           shipmentResp.Waybill,
+				TrackingURL:       trackingURL,
+				ShipmentStatus:    "manifested",
+				ShipmentCreatedAt: time.Now(),
+				LastStatusUpdate:  time.Now(),
+			},
+			"updated_at": time.Now(),
+		},
+	})
+	if updateErr != nil {
+		log.Printf("[DELHIVERY] ERROR: Failed to update order with shipping info: %v", updateErr)
+		return
+	}
+
+	log.Printf("[DELHIVERY] SUCCESS: Order %s updated with waybill %s", orderDisplay, shipmentResp.Waybill)
+	log.Printf("[DELHIVERY] Tracking URL: %s", trackingURL)
+	log.Printf("[DELHIVERY] ========== Shipment creation COMPLETED for order %s ==========", orderDisplay)
 }
 
 // GetOrders retrieves order history for a user
@@ -300,18 +584,38 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 		})
 	}
 
+	// Define OrderResponse type for consistent API responses
+	type OrderResponse struct {
+		ID              string                `json:"id"`
+		OrderNumber     string                `json:"orderNumber"`
+		UserID          string                `json:"userId"`
+		Items           []models.OrderItem    `json:"items"`
+		Total           float64               `json:"total"`
+		Status          string                `json:"status"`
+		PaymentStatus   string                `json:"paymentStatus"`
+		ShippingAddress models.Address        `json:"shippingAddress"`
+		PaymentInfo     models.PaymentInfo    `json:"paymentInfo"`
+		ShippingInfo    *models.ShippingInfo  `json:"shippingInfo,omitempty"`
+		PickupDetails   *models.PickupDetails `json:"pickupDetails,omitempty"`
+		CreatedAt       time.Time             `json:"createdAt"`
+		UpdatedAt       time.Time             `json:"updatedAt"`
+	}
+
 	// Check if the orders are in Redis cache
 	cacheKey := fmt.Sprintf("orders:%s", userID.Hex())
-	var orders []models.Order
-	err = h.DB.CacheGet(ctx, cacheKey, &orders)
+	var cachedOrders []OrderResponse
+	err = h.DB.CacheGet(ctx, cacheKey, &cachedOrders)
 	if err == nil {
 		// Cache hit
+		log.Printf("[GET_ORDERS] Cache hit for user %s (%d orders)", userID.Hex(), len(cachedOrders))
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"success": true,
 			"message": "Orders retrieved from cache",
-			"data":    orders,
+			"data":    cachedOrders,
 		})
 	}
+
+	var orders []models.Order
 
 	// Find all orders for the user, sorted by creation date descending
 	orderCollection := h.DB.Collections().Orders
@@ -336,18 +640,6 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 	}
 
 	// Map orders to convert ObjectID to hex string for frontend
-	type OrderResponse struct {
-		ID              string             `json:"id"`
-		UserID          string             `json:"userId"`
-		Items           []models.OrderItem `json:"items"`
-		Total           float64            `json:"total"`
-		Status          string             `json:"status"`
-		PaymentStatus   string             `json:"paymentStatus"`
-		ShippingAddress models.Address     `json:"shippingAddress"`
-		PaymentInfo     models.PaymentInfo `json:"paymentInfo"`
-		CreatedAt       time.Time          `json:"createdAt"`
-		UpdatedAt       time.Time          `json:"updatedAt"`
-	}
 	var respOrders []OrderResponse
 	for _, o := range orders {
 		payStatus := o.PaymentStatus
@@ -360,8 +652,14 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 				payStatus = "unpaid"
 			}
 		}
+		// Debug: Log pickup details from DB
+		if o.PickupDetails != nil {
+			log.Printf("[GET_ORDERS] 🏪 Order %s has PickupDetails: '%s'",
+				o.OrderNumber, o.PickupDetails.LocationName)
+		}
 		respOrders = append(respOrders, OrderResponse{
 			ID:              o.ID.Hex(),
+			OrderNumber:     o.OrderNumber,
 			UserID:          o.UserID.Hex(),
 			Items:           o.Items,
 			Total:           o.Total,
@@ -369,6 +667,8 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 			PaymentStatus:   payStatus,
 			ShippingAddress: o.ShippingAddress,
 			PaymentInfo:     o.PaymentInfo,
+			ShippingInfo:    o.ShippingInfo,
+			PickupDetails:   o.PickupDetails,
 			CreatedAt:       o.CreatedAt,
 			UpdatedAt:       o.UpdatedAt,
 		})
@@ -657,6 +957,33 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 		})
 	}
 
+	log.Printf("[CANCEL_ORDER] 🚫 Cancelling order: %s (Status: %s)", order.OrderNumber, order.Status)
+
+	// Try to cancel Delhivery shipment if it exists and hasn't been picked up yet
+	if order.ShippingInfo != nil && order.ShippingInfo.Waybill != "" && h.DelhiveryService != nil {
+		waybill := order.ShippingInfo.Waybill
+		log.Printf("[CANCEL_ORDER] 📦 Attempting to cancel Delhivery shipment: %s", waybill)
+
+		// Only attempt to cancel if not already picked up or delivered
+		canCancelShipment := order.ShippingInfo.ShipmentStatus == "" ||
+			order.ShippingInfo.ShipmentStatus == "manifested" ||
+			order.ShippingInfo.ShipmentStatus == "pending"
+
+		if canCancelShipment {
+			cancelErr := h.DelhiveryService.CancelShipment(waybill)
+			if cancelErr != nil {
+				log.Printf("[CANCEL_ORDER] ⚠️ Failed to cancel Delhivery shipment %s: %v", waybill, cancelErr)
+				log.Printf("[CANCEL_ORDER] ℹ️ Continuing with order cancellation despite shipment cancel failure")
+				// Don't fail the entire cancellation if Delhivery cancel fails
+			} else {
+				log.Printf("[CANCEL_ORDER] ✅ Delhivery shipment %s cancelled successfully", waybill)
+			}
+		} else {
+			log.Printf("[CANCEL_ORDER] ℹ️ Shipment already picked up (status: %s), cannot cancel with carrier",
+				order.ShippingInfo.ShipmentStatus)
+		}
+	}
+
 	// Update the order status to "cancelled" and set paymentStatus if prepaid
 	now := time.Now()
 	setCancel := bson.M{
@@ -666,6 +993,7 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 	if order.PaymentStatus == "paid" {
 		// Business rule: mark as refunded; real refund should be processed via gateway
 		setCancel["payment_status"] = "refunded"
+		log.Printf("[CANCEL_ORDER] 💰 Order was prepaid, marking for refund")
 	}
 	_, err = orderCollection.UpdateOne(
 		ctx,
@@ -682,6 +1010,7 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 	}
 
 	// Return inventory to stock
+	log.Printf("[CANCEL_ORDER] 📦 Restoring inventory for %d items", len(order.Items))
 	productsCollection := h.DB.Collections().Products
 	for _, item := range order.Items {
 		_, err = productsCollection.UpdateOne(
@@ -691,7 +1020,9 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 		)
 		if err != nil {
 			// Log error but continue processing
-			fmt.Printf("Error restoring inventory for product %s: %v\n", item.ProductID.Hex(), err)
+			log.Printf("[CANCEL_ORDER] ⚠️ Error restoring inventory for product %s: %v", item.ProductID.Hex(), err)
+		} else {
+			log.Printf("[CANCEL_ORDER] ✅ Restored %d units of product %s", item.Quantity, item.ProductName)
 		}
 
 		// Invalidate product cache
@@ -704,6 +1035,8 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 	userOrdersCacheKey := fmt.Sprintf("orders:%s", order.UserID.Hex())
 	h.DB.CacheDel(ctx, orderCacheKey)
 	h.DB.CacheDel(ctx, userOrdersCacheKey)
+
+	log.Printf("[CANCEL_ORDER] ✅ Order %s cancelled successfully", order.OrderNumber)
 
 	// Return success response
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -744,17 +1077,19 @@ func (h *OrderHandler) GetAllOrders(c *fiber.Ctx) error {
 	}
 	// Map orders to frontend format if needed
 	type OrderResponse struct {
-		ID              string             `json:"id"`
-		UserID          string             `json:"userId"`
-		CustomerName    string             `json:"customerName"`
-		Items           []models.OrderItem `json:"items"`
-		Total           float64            `json:"total"`
-		Status          string             `json:"status"`
-		PaymentStatus   string             `json:"paymentStatus"`
-		ShippingAddress models.Address     `json:"shippingAddress"`
-		PaymentInfo     models.PaymentInfo `json:"paymentInfo"`
-		CreatedAt       time.Time          `json:"createdAt"`
-		UpdatedAt       time.Time          `json:"updatedAt"`
+		ID              string               `json:"id"`
+		OrderNumber     string               `json:"orderNumber"`
+		UserID          string               `json:"userId"`
+		CustomerName    string               `json:"customerName"`
+		Items           []models.OrderItem   `json:"items"`
+		Total           float64              `json:"total"`
+		Status          string               `json:"status"`
+		PaymentStatus   string               `json:"paymentStatus"`
+		ShippingAddress models.Address       `json:"shippingAddress"`
+		PaymentInfo     models.PaymentInfo   `json:"paymentInfo"`
+		ShippingInfo    *models.ShippingInfo `json:"shippingInfo,omitempty"`
+		CreatedAt       time.Time            `json:"createdAt"`
+		UpdatedAt       time.Time            `json:"updatedAt"`
 	}
 	userCollection := h.DB.Collections().Users
 	// Cache userId to name to avoid duplicate DB calls
@@ -785,6 +1120,7 @@ func (h *OrderHandler) GetAllOrders(c *fiber.Ctx) error {
 		}
 		respOrders = append(respOrders, OrderResponse{
 			ID:              o.ID.Hex(),
+			OrderNumber:     o.OrderNumber,
 			UserID:          userIdStr,
 			CustomerName:    customerName,
 			Items:           o.Items,
@@ -793,6 +1129,7 @@ func (h *OrderHandler) GetAllOrders(c *fiber.Ctx) error {
 			PaymentStatus:   payStatus,
 			ShippingAddress: o.ShippingAddress,
 			PaymentInfo:     o.PaymentInfo,
+			ShippingInfo:    o.ShippingInfo,
 			CreatedAt:       o.CreatedAt,
 			UpdatedAt:       o.UpdatedAt,
 		})

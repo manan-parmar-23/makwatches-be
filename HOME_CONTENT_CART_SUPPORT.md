@@ -136,7 +136,7 @@ Price: 3800.0  // Float format (already compatible)
 
 # Verify in cart API
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-  http://127.0.0.1:8080/cart/YOUR_USER_ID
+  https://api.makwatches.in/cart/YOUR_USER_ID
 ```
 
 ### 2. Test Adding Collection Feature to Cart

@@ -41,6 +41,21 @@ type Config struct {
 	// Firebase settings
 	FirebaseCredentialsPath string
 	FirebaseBucketName      string
+	// Delhivery settings
+	DelhiveryAPIToken       string
+	DelhiveryBaseURL        string
+	DelhiveryPickupLocation string
+	DelhiverySellerName     string
+	DelhiverySellerPhone    string
+	DelhiverySellerAddress  string
+	DelhiverySellerCity     string
+	DelhiverySellerState    string
+	DelhiverySellerPincode  string
+	DelhiveryReturnAddress  string
+	DelhiveryReturnCity     string
+	DelhiveryReturnState    string
+	DelhiveryReturnPincode  string
+	DelhiveryReturnPhone    string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -87,6 +102,21 @@ func LoadConfig() (*Config, error) {
 		// Firebase config
 		FirebaseCredentialsPath: getEnv("FIREBASE_CREDENTIALS_PATH", "firebase-admin.json"),
 		FirebaseBucketName:      getEnv("FIREBASE_BUCKET_NAME", "mak-watches.firebasestorage.app"),
+		// Delhivery config
+		DelhiveryAPIToken:       getEnv("DELHIVERY_API_TOKEN", ""),
+		DelhiveryBaseURL:        getEnv("DELHIVERY_BASE_URL", "https://track.delhivery.com"), // Use https://staging-express.delhivery.com for staging
+		DelhiveryPickupLocation: getEnv("DELHIVERY_PICKUP_LOCATION", "Shree Ganesh Watch"),
+		DelhiverySellerName:     getEnv("DELHIVERY_SELLER_NAME", "Mak Watches"),
+		DelhiverySellerPhone:    getEnv("DELHIVERY_SELLER_PHONE", "9974959693"),
+		DelhiverySellerAddress:  getEnv("DELHIVERY_SELLER_ADDRESS", "Shree Ganesh Watch, Matva Street, Near Balaji Complex, Stand chowk, Jetpur, Rajkot"),
+		DelhiverySellerCity:     getEnv("DELHIVERY_SELLER_CITY", "Jetpur"),
+		DelhiverySellerState:    getEnv("DELHIVERY_SELLER_STATE", "Gujarat"),
+		DelhiverySellerPincode:  getEnv("DELHIVERY_SELLER_PINCODE", "360370"),
+		DelhiveryReturnAddress:  getEnv("DELHIVERY_RETURN_ADDRESS", "Shree Ganesh Watch, Matva Street, Near Balaji Complex, Stand chowk, Jetpur, Rajkot"),
+		DelhiveryReturnCity:     getEnv("DELHIVERY_RETURN_CITY", "Jetpur"),
+		DelhiveryReturnState:    getEnv("DELHIVERY_RETURN_STATE", "Gujarat"),
+		DelhiveryReturnPincode:  getEnv("DELHIVERY_RETURN_PINCODE", "360370"),
+		DelhiveryReturnPhone:    getEnv("DELHIVERY_RETURN_PHONE", "9974959693"),
 	}
 
 	return cfg, nil
