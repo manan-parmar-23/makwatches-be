@@ -283,10 +283,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 	// Check for code parameter
 	if code == "" {
 		// Redirect to frontend callback with error so UI can show a message
-		frontendURL := "http://localhost:3000"
-		if h.Config != nil && h.Config.Environment == "production" {
-			frontendURL = "https://makwatches.in"
-		}
+		frontendURL := h.Config.FrontendURL
 		redirectErr := url.QueryEscape("missing_code")
 		return c.Redirect(fmt.Sprintf("%s/auth/callback?error=%s", frontendURL, redirectErr))
 	}
@@ -307,10 +304,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 	if err != nil {
 		// Log detailed error and redirect to frontend with an error token
 		fmt.Printf("Google token exchange failed: %v\n", err)
-		frontendURL := "http://localhost:3000"
-		if h.Config != nil && h.Config.Environment == "production" {
-			frontendURL = "https://makwatches.in"
-		}
+		frontendURL := h.Config.FrontendURL
 		// Include a short encoded error message so frontend can show it
 		redirectErr := url.QueryEscape("token_exchange_failed")
 		return c.Redirect(fmt.Sprintf("%s/auth/callback?error=%s", frontendURL, redirectErr))
@@ -320,10 +314,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 	userInfo, err := h.GoogleOAuth.GetUserInfo(accessToken)
 	if err != nil {
 		fmt.Printf("Google GetUserInfo failed: %v\n", err)
-		frontendURL := "http://localhost:3000"
-		if h.Config != nil && h.Config.Environment == "production" {
-			frontendURL = "https://makwatches.in"
-		}
+		frontendURL := h.Config.FrontendURL
 		redirectErr := url.QueryEscape("userinfo_failed")
 		return c.Redirect(fmt.Sprintf("%s/auth/callback?error=%s", frontendURL, redirectErr))
 	}
@@ -485,10 +476,7 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 	}
 
 	// Prepare frontend redirect URL with token
-	frontendURL := "http://localhost:3000" // Default for development
-	if h.Config.Environment == "production" {
-		frontendURL = "https://makwatches.in" // Production URL
-	}
+	frontendURL := h.Config.FrontendURL
 
 	// Redirect to frontend with token as query param
 	// In a real application, use a more secure method to pass the token

@@ -18,6 +18,7 @@ import (
 type Config struct {
 	Port               string
 	Environment        string
+	FrontendURL        string
 	MongoURI           string
 	DatabaseName       string
 	RedisURI           string
@@ -67,6 +68,7 @@ func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Port:               getEnv("PORT", "8080"),
 		Environment:        getEnv("ENVIRONMENT", "development"),
+		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"), // Default to localhost for development
 		MongoURI:           getEnv("MONGO_URI", "mongodb://localhost:27017"),
 		DatabaseName:       getEnv("DATABASE_NAME", "makwatches"),
 		RedisURI:           getEnv("REDIS_URI", "localhost:6379"),

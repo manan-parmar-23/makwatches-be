@@ -83,9 +83,14 @@ func main() {
 	handlers.SetupRoutes(app, dbClient, cfg)
 
 	// Start the server in a goroutine
+	// Railway deployment support: explicitly check PORT env variable
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = cfg.Port // Fallback to config default (8080)
+	}
 	go func() {
-		log.Printf("Server starting on port %s in %s mode", cfg.Port, cfg.Environment)
-		if err := app.Listen(":" + cfg.Port); err != nil {
+		log.Printf("Server starting on port %s in %s mode", port, cfg.Environment)
+		if err := app.Listen(":" + port); err != nil {
 			log.Fatalf("Failed to start server: %v", err)
 		}
 	}()
