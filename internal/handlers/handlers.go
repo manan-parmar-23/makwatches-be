@@ -68,6 +68,9 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 
 	// Public static assets must remain outside authenticated route groups.
 	app.Static("/uploads", "./uploads")
+	app.Get("/uploads/*", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNotFound)
+	})
 	app.Post("/upload", middleware.Auth(cfg.JWTSecret), middleware.Role("admin"), UploadHandler)
 
 	// Admin product routes (must authenticate first, then role check)
