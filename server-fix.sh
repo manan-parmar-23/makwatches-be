@@ -47,12 +47,11 @@ services:
       - RAZORPAY_KEY_SECRET_TEST=${RAZORPAY_KEY_SECRET_TEST}
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
       - FIREBASE_BUCKET_NAME=${FIREBASE_BUCKET_NAME}
-      - FIREBASE_CREDENTIALS_PATH=/app/firebase-admin.json
+      - FIREBASE_CREDENTIALS_JSON=${FIREBASE_CREDENTIALS_JSON}
       - VERCEL_ORIGIN=${VERCEL_ORIGIN:-https://mak-watches.vercel.app}
       - DEV_ORIGIN=${DEV_ORIGIN:-http://localhost:4200}
     volumes:
       - ./uploads:/app/uploads
-      - ./firebase-admin.json:/app/firebase-admin.json:ro
     networks:
       - makwatches-network
     healthcheck:

@@ -2,6 +2,7 @@ package firebase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,15 +15,19 @@ import (
 )
 
 // FirebaseClient wraps the GCS client for Firebase Storage
-// Usage: client, err := NewFirebaseClient(ctx, "path/to/serviceAccountKey.json", "your-bucket-name")
+// Usage: client, err := NewFirebaseClient(ctx, "{...service account json...}", "your-bucket-name")
 type FirebaseClient struct {
 	StorageClient *storage.Client
 	BucketName    string
 }
 
-func NewFirebaseClient(ctx context.Context, credentialsPath, bucketName string) (*FirebaseClient, error) {
-	log.Printf("[FIREBASE] Initializing client with credentials: %s, bucket: %s", credentialsPath, bucketName)
-	client, err := storage.NewClient(ctx, option.WithCredentialsFile(credentialsPath))
+func NewFirebaseClient(ctx context.Context, credentialsJSON, bucketName string) (*FirebaseClient, error) {
+	if strings.TrimSpace(credentialsJSON) == "" {
+		return nil, errors.New("FIREBASE_CREDENTIALS_JSON is required and cannot be empty")
+	}
+
+	log.Printf("[FIREBASE] Initializing client with JSON credentials, bucket: %s", bucketName)
+	client, err := storage.NewClient(ctx, option.WithCredentialsJSON([]byte(credentialsJSON)))
 	if err != nil {
 		log.Printf("[FIREBASE] Failed to create storage client: %v", err)
 		return nil, fmt.Errorf("failed to create storage client: %w", err)

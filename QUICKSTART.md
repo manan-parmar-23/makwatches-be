@@ -44,7 +44,7 @@ Your API will be available at: **http://localhost:8080**
    # Edit with your values
    ```
 
-2. **`firebase-admin.json`** - Firebase credentials (for image uploads)
+2. **`FIREBASE_CREDENTIALS_JSON`** - Firebase credentials (for image uploads)
    - Download from Firebase Console
    - See [FIREBASE_SETUP.md](FIREBASE_SETUP.md) for instructions
 
@@ -152,7 +152,7 @@ PORT=8081
 - Check firewall/network settings
 
 **Firebase uploads fail:**
-- Ensure firebase-admin.json exists
+- Ensure FIREBASE_CREDENTIALS_JSON is set
 - Verify Firebase Storage is enabled
 - Check service account permissions
 
@@ -182,7 +182,7 @@ makwatches-be/
 
 ## 🔐 Security Notes
 
-- Never commit `.env` or `firebase-admin.json`
+- Never commit `.env` or service-account JSON
 - Use strong JWT secrets (32+ characters)
 - Enable HTTPS in production
 - Keep dependencies updated

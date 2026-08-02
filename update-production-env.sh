@@ -40,12 +40,7 @@ echo "[INFO] Copying docker-compose.prod.yml to production directory..."
 sudo cp "$CURRENT_DIR/docker-compose.prod.yml" "$PROD_DIR/docker-compose.yml"
 echo "[SUCCESS] docker-compose.yml updated"
 
-# Copy firebase-admin.json if it exists
-if [ -f "$CURRENT_DIR/firebase-admin.json" ]; then
-    echo "[INFO] Copying firebase-admin.json..."
-    sudo cp "$CURRENT_DIR/firebase-admin.json" "$PROD_DIR/firebase-admin.json"
-    echo "[SUCCESS] firebase-admin.json updated"
-fi
+# Firebase credentials are now provided via FIREBASE_CREDENTIALS_JSON.
 
 echo ""
 echo "[INFO] Files in production directory:"

@@ -31,7 +31,7 @@ services:
       # Firebase configuration
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_BUCKET_NAME: ${FIREBASE_BUCKET_NAME}
-      FIREBASE_CREDENTIALS_PATH: "${FIREBASE_CREDENTIALS_PATH:-firebase-admin.json}"
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON}
       # CORS origins
       VERCEL_ORIGIN: "${VERCEL_ORIGIN:-https://mak-watches.vercel.app}"
       DEV_ORIGIN: "${DEV_ORIGIN:-http://localhost:4200}"
@@ -39,7 +39,6 @@ services:
       DEV_ORIGINS: "${DEV_ORIGINS:-http://localhost:4200,http://localhost:3000}"
     volumes:
       - ./uploads:/app/uploads
-      - ./firebase-admin.json:/app/firebase-admin.json:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]

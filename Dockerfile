@@ -42,8 +42,7 @@ RUN mkdir -p /app/uploads && \
 # Copy binary from builder
 COPY --from=builder /app/makwatches-be .
 
-# Copy firebase-admin.json if it exists (handled in CI/CD)
-COPY firebase-admin.json* ./
+# Firebase credentials are provided via the FIREBASE_CREDENTIALS_JSON environment variable.
 
 # Switch to non-root user
 USER appuser

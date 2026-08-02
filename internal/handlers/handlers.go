@@ -66,8 +66,8 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	app.Get("/home-content", homeContentHandler.GetHomeContent)
 	app.Get("/home-content/product/:productId", homeContentHandler.GetHomeContentByProductID)
 
-	// Public (or auth-protected) upload route for admin (requires auth+role)
-	app.Static("/uploads", "uploads")
+	// Public static assets must remain outside authenticated route groups.
+	app.Static("/uploads", "./uploads")
 	app.Post("/upload", middleware.Auth(cfg.JWTSecret), middleware.Role("admin"), UploadHandler)
 
 	// Admin product routes (must authenticate first, then role check)
@@ -77,11 +77,11 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	adminProducts.Delete("/:id", productHandler.DeleteProduct)
 
 	// Protected routes
-	api := app.Group("/", middleware.Auth(cfg.JWTSecret))
+	protected := app.Group("", middleware.Auth(cfg.JWTSecret))
 
 	// Review routes (authenticated)
 	// POST /reviews -> CreateReview
-	reviews := api.Group("/reviews")
+	reviews := protected.Group("/reviews")
 	reviews.Post("/", reviewHandler.CreateReview)
 	// Optional: allow updating/deleting reviews by owner
 	reviews.Put("/:id", reviewHandler.UpdateReview)
@@ -89,16 +89,16 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	reviews.Post("/:id/helpful", reviewHandler.MarkReviewHelpful)
 
 	// User "me" endpoint
-	api.Get("/me", authHandler.Me)
+	protected.Get("/me", authHandler.Me)
 
 	// Cart routes (already protected by api group)
-	cart := api.Group("/cart")
+	cart := protected.Group("/cart")
 	cart.Post("/", cartHandler.AddToCart)
 	cart.Get("/:userID", cartHandler.GetCart)
 	cart.Delete("/:userID/:productID", cartHandler.RemoveFromCart)
 
 	// Order routes
-	orders := api.Group("/orders")
+	orders := protected.Group("/orders")
 	orders.Get("/user/:userID", orderHandler.GetOrders)
 	orders.Get("/:orderID", orderHandler.GetOrder)
 	orders.Post("/:orderID/cancel", orderHandler.CancelOrder)
@@ -107,7 +107,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	orders.Patch("/:orderID/status", middleware.Role("admin"), orderHandler.UpdateOrderStatus)
 
 	// Payment routes
-	payments := api.Group("/payments")
+	payments := protected.Group("/payments")
 	payments.Post("/razorpay/order", paymentHandler.CreateRazorpayOrder)
 
 	// Public webhook endpoint for Razorpay (Razorpay will POST here)
@@ -125,7 +125,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	app.Post("/webhooks/delhivery", shippingHandler.DelhiveryWebhook)
 
 	// Protected shipping routes
-	shipping := api.Group("/shipping")
+	shipping := protected.Group("/shipping")
 	shipping.Get("/track/order/:orderID", shippingHandler.TrackShipment) // Track by order ID
 
 	// Admin only routes (must authenticate first, then check role)
@@ -195,24 +195,24 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	adminShipping.Post("/request-pickup", shippingHandler.RequestPickup)          // Request pickup from Delhivery
 
 	// Checkout route
-	api.Post("/checkout", orderHandler.Checkout)
+	protected.Post("/checkout", orderHandler.Checkout)
 
 	// Recommendation routes
-	recommendations := api.Group("/recommendations")
+	recommendations := protected.Group("/recommendations")
 	recommendations.Get("/", recHandler.GetRecommendations)
 	recommendations.Post("/feedback", recHandler.SubmitFeedback)
 
 	// User profile routes
-	profiles := api.Group("/profiles")
+	profiles := protected.Group("/profiles")
 	profiles.Get("/", userProfileHandler.GetProfile)
 	profiles.Put("/", userProfileHandler.UpdateProfile)
 
 	// User preferences routes
-	preferences := api.Group("/preferences")
+	preferences := protected.Group("/preferences")
 	preferences.Put("/", userProfileHandler.UpdatePreferences)
 
 	// Wishlist routes
-	wishlist := api.Group("/wishlist")
+	wishlist := protected.Group("/wishlist")
 	wishlist.Get("/", wishlistHandler.GetWishlist)
 	wishlist.Post("/", wishlistHandler.AddToWishlist)
 	wishlist.Delete("/:id", wishlistHandler.RemoveFromWishlist)
@@ -220,7 +220,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 
 	// Account routes (consolidated user account functionality)
 	accountHandler := NewAccountHandler(db, cfg)
-	account := api.Group("/account")
+	account := protected.Group("/account")
 	account.Get("/overview", accountHandler.GetAccountOverview)
 	account.Get("/reviews", accountHandler.GetAccountReviews)
 	account.Delete("/reviews/:id", accountHandler.DeleteAccountReview)
@@ -233,7 +233,7 @@ func SetupRoutes(app *fiber.App, db *database.DBClient, cfg *config.Config) {
 	account.Post("/orders/:orderID/cancel", orderHandler.CancelOrder) // Cancel order endpoint
 
 	// Address book routes
-	addresses := api.Group("/addresses")
+	addresses := protected.Group("/addresses")
 	addresses.Get("/", addressBookHandler.GetAddresses)
 	addresses.Get("/:id", addressBookHandler.GetAddress)
 	addresses.Post("/", addressBookHandler.CreateAddress)

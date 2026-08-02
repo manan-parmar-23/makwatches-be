@@ -1,3 +1,6 @@
+# Firebase credentials are provided through FIREBASE_CREDENTIALS_JSON
+
+# Note: Ensure that your environment variables are set correctly.
 # Pehnaw Backend
 
 This repository contains the backend API for the Pehnaw application.

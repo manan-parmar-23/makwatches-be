@@ -9,12 +9,11 @@ services:
       - "8080:8080"
     volumes:
       - ./uploads:/app/uploads
-      - ./firebase-admin.json:/app/firebase-admin.json:ro
     environment:
       - DOCKER_USERNAME=${DOCKER_USERNAME}
       - ENVIRONMENT=${ENVIRONMENT}
       - FIREBASE_BUCKET_NAME=${FIREBASE_BUCKET_NAME}
-      - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH}
+      - FIREBASE_CREDENTIALS_JSON=${FIREBASE_CREDENTIALS_JSON}
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}

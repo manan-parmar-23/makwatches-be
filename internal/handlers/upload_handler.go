@@ -23,7 +23,7 @@ func UploadHandler(c *fiber.Ctx) error {
 		log.Printf("[UPLOAD] Failed to load config: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "Failed to load config", "error": err.Error()})
 	}
-	log.Printf("[UPLOAD] Config loaded. Firebase credentials: %s, bucket: %s", cfg.FirebaseCredentialsPath, cfg.FirebaseBucketName)
+	log.Printf("[UPLOAD] Config loaded. Firebase bucket: %s", cfg.FirebaseBucketName)
 
 	form, err := c.MultipartForm()
 	if err != nil {
@@ -38,7 +38,7 @@ func UploadHandler(c *fiber.Ctx) error {
 	log.Printf("[UPLOAD] Found %d files to upload", len(files))
 
 	ctx := context.Background()
-	fbClient, err := firebase.NewFirebaseClient(ctx, cfg.FirebaseCredentialsPath, cfg.FirebaseBucketName)
+	fbClient, err := firebase.NewFirebaseClient(ctx, cfg.FirebaseCredentialsJSON, cfg.FirebaseBucketName)
 	useLocalFallback := false
 	if err != nil {
 		log.Printf("[UPLOAD] Failed to init Firebase client: %v", err)

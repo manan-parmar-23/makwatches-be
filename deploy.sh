@@ -52,8 +52,8 @@ check_requirements() {
         exit 1
     fi
     
-    if [ ! -f "firebase-admin.json" ]; then
-        log_warning "firebase-admin.json not found. Make sure to add it if using Firebase."
+    if [ -z "$FIREBASE_CREDENTIALS_JSON" ]; then
+        log_warning "FIREBASE_CREDENTIALS_JSON is not set. Firebase features will fail until it is provided."
     fi
     
     log_success "All requirements met!"

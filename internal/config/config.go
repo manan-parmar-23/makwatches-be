@@ -40,7 +40,7 @@ type Config struct {
 	GoogleClientSecret string
 	GoogleRedirectURL  string
 	// Firebase settings
-	FirebaseCredentialsPath string
+	FirebaseCredentialsJSON string
 	FirebaseBucketName      string
 	// Delhivery settings
 	DelhiveryAPIToken       string
@@ -102,7 +102,7 @@ func LoadConfig() (*Config, error) {
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/google/callback"),
 		// Firebase config
-		FirebaseCredentialsPath: getEnv("FIREBASE_CREDENTIALS_PATH", "firebase-admin.json"),
+		FirebaseCredentialsJSON: getEnv("FIREBASE_CREDENTIALS_JSON", ""),
 		FirebaseBucketName:      getEnv("FIREBASE_BUCKET_NAME", "mak-watches.firebasestorage.app"),
 		// Delhivery config
 		DelhiveryAPIToken:       getEnv("DELHIVERY_API_TOKEN", ""),

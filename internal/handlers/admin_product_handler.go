@@ -27,7 +27,7 @@ func (h *ProductHandler) CreateProduct(c *fiber.Ctx) error {
 	uploadedImages := []string{}
 
 	// Initialize Firebase client early so we can upload files if present.
-	fbClient, err := firebase.NewFirebaseClient(ctx, h.Config.FirebaseCredentialsPath, h.Config.FirebaseBucketName)
+	fbClient, err := firebase.NewFirebaseClient(ctx, h.Config.FirebaseCredentialsJSON, h.Config.FirebaseBucketName)
 	useLocalFallback := false
 	if err != nil {
 		if h.Config.Environment == "development" || h.Config.Environment == "dev" || h.Config.Environment == "local" {
@@ -231,7 +231,7 @@ func (h *ProductHandler) UpdateProduct(c *fiber.Ctx) error {
 	uploadedImages := []string{}
 
 	// Initialize Firebase client for uploads (with development fallback)
-	fbClient, err := firebase.NewFirebaseClient(ctx, h.Config.FirebaseCredentialsPath, h.Config.FirebaseBucketName)
+	fbClient, err := firebase.NewFirebaseClient(ctx, h.Config.FirebaseCredentialsJSON, h.Config.FirebaseBucketName)
 	useLocalFallback := false
 	if err != nil {
 		if h.Config.Environment == "development" || h.Config.Environment == "dev" || h.Config.Environment == "local" {

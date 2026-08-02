@@ -85,7 +85,7 @@ RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 ```env
 FIREBASE_PROJECT_ID=your_firebase_project_id
 FIREBASE_BUCKET_NAME=your_firebase_bucket_name
-FIREBASE_CREDENTIALS_PATH=firebase-admin.json
+FIREBASE_CREDENTIALS_JSON={"type":"service_account",...}
 ```
 
 ### Docker

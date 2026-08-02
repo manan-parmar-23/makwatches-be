@@ -31,7 +31,7 @@ After enabling, your bucket will be available at: `makwatches-1ae1a.appspot.com`
 1. Go to Project Settings > Service Accounts
 2. Click "Generate new private key"
 3. Download the JSON file
-4. Rename it to `firebase-admin.json` and place it in the root of your project
+4. Copy the entire JSON into the `FIREBASE_CREDENTIALS_JSON` environment variable
 
 ### 3. Configure Environment Variables
 
@@ -39,7 +39,7 @@ Add the following to your `.env` file:
 
 ```env
 # Firebase Configuration
-FIREBASE_CREDENTIALS_PATH=firebase-admin.json
+FIREBASE_CREDENTIALS_JSON={"type":"service_account",...}
 FIREBASE_BUCKET_NAME=your-project-id.appspot.com
 ```
 
@@ -74,15 +74,14 @@ Once configured, the backend will automatically:
 
 ```
 your-project/
-├── firebase-admin.json          # Service account credentials (DO NOT COMMIT)
-├── firebase-admin.json.example  # Example credentials file
+├── .env                         # Local environment file containing FIREBASE_CREDENTIALS_JSON
 ├── .env                         # Environment variables (DO NOT COMMIT)
 └── example.env                  # Example environment file
 ```
 
 ## Important Security Notes
 
-- **Never commit** `firebase-admin.json` to version control
+- **Never commit** service-account JSON to version control
 - **Never commit** `.env` files with real credentials
 - Use environment variables in production
 - Regularly rotate service account keys
@@ -102,7 +101,7 @@ You can test the upload functionality using:
 
 1. **"Failed to initialize Firebase client"**
 
-   - Check if `firebase-admin.json` exists and has correct permissions
+   - Check that `FIREBASE_CREDENTIALS_JSON` is set and valid JSON
    - Verify the service account has Storage Admin role
 
 2. **"Failed to upload to Firebase Storage"**
